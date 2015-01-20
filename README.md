@@ -285,4 +285,9 @@ sstring/ssx/ssy/sst -
         sigma from 1.0 to 10.0 in the temporal dimension.
 
    If 'sstring' is specified, it takes precedence over ssx/ssy/sst.
+
+
+planes -
+
+   A list of the planes to process. By default all planes are processed.
 ```
