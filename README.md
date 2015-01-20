@@ -155,7 +155,7 @@ f0beta -
    which has to perform a pow() computation, and is therefore much slower.
 
 
-nfile -
+nstring -
 
    When ftype<2, nstring can be used to specify block locations in the video
    from which dfttest will estimate the noise power spectrum (sigma) to
