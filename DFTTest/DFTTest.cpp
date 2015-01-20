@@ -515,6 +515,7 @@ static const VSFrameRef *VS_CC dfttestGetFrame(int n, int activationReason, void
                     vsapi->setFilterError("DFTTest: malloc failure (ebuff)", frameCtx);
                     return nullptr;
                 }
+                memset(ebuff[plane], 0, d->padWidth[plane] * d->padHeight[plane] * sizeof(float));
             }
         }
 
@@ -532,7 +533,6 @@ static const VSFrameRef *VS_CC dfttestGetFrame(int n, int activationReason, void
             for (int plane = 0; plane < d->vi->format->numPlanes; plane++) {
                 if (d->process[plane]) {
                     pad[plane] = vsapi->newVideoFrame(d->padFormat, d->padWidth[plane], d->padHeight[plane], nullptr, core);
-                    memset(ebuff[plane], 0, d->padWidth[plane] * d->padHeight[plane] * sizeof(float));
                 }
             }
 
@@ -551,11 +551,6 @@ static const VSFrameRef *VS_CC dfttestGetFrame(int n, int activationReason, void
         } else {
             const VSFrameRef * src[15];
             VSFrameRef * pad[15][3];
-
-            for (int plane = 0; plane < d->vi->format->numPlanes; plane++) {
-                if (d->process[plane])
-                    memset(ebuff[plane], 0, d->padWidth[plane] * d->padHeight[plane] * sizeof(float));
-            }
 
             const int pos = d->tbsize / 2;
 
