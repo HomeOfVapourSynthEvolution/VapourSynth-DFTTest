@@ -1,5 +1,5 @@
 #----------------------------------------------------------------------------
-#  Makefile for VapourSynth-DFTTest, modified based on d2vsource/GNUmakefile
+#  Makefile for VapourSynth-DFTTest
 #----------------------------------------------------------------------------
 
 include config.mak
