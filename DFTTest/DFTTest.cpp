@@ -531,9 +531,8 @@ static const VSFrameRef *VS_CC dfttestGetFrame(int n, int activationReason, void
         if (d->tbsize == 1) {
             VSFrameRef * pad[3];
             for (int plane = 0; plane < d->vi->format->numPlanes; plane++) {
-                if (d->process[plane]) {
+                if (d->process[plane])
                     pad[plane] = vsapi->newVideoFrame(d->padFormat, d->padWidth[plane], d->padHeight[plane], nullptr, core);
-                }
             }
 
             if (d->vi->format->bitsPerSample == 8) {
