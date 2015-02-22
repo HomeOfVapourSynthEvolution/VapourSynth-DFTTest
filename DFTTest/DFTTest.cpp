@@ -29,7 +29,7 @@
 #include <vapoursynth/VapourSynth.h>
 #include <vapoursynth/VSHelper.h>
 
-#define EXTRA(a,b) ((a) % (b) ? (b) - ((a) % (b)) : 0)
+#define EXTRA(a,b) (((a) % (b)) ? ((b) - ((a) % (b))) : 0)
 
 struct DFTTestData {
     VSNodeRef * node;
@@ -57,10 +57,10 @@ static double besselI0(double p) {
     int k = 1;
     double v;
     do {
-        n = n * p;
-        d = d * k;
+        n *= p;
+        d *= k;
         v = n / d;
-        t = t + v * v;
+        t += v * v;
     } while (++k < 15 && v > 1.0e-8);
     return t;
 }
@@ -93,7 +93,7 @@ static double getWinValue(const double n, const double size, const int win, cons
     case 7: // rectangular
         return 1.;
     case 8: // Bartlett
-        return 2. / size * (size / 2. - std::abs(n - size / 2.));
+        return 2. / size * (size / 2. - std::fabs(n - size / 2.));
     case 9: // Bartlett-Hann
         return 0.62 - 0.48 * (n / size - 0.5) - 0.38 * std::cos(2. * M_PI * n / size);
     case 10: // Nuttall
@@ -391,7 +391,7 @@ static void intcast_C(const float * VS_RESTRICT ebp, T * VS_RESTRICT dstp, const
 }
 
 template<typename T>
-static void func_0(VSFrameRef * src[3], VSFrameRef * dst, float ** VS_RESTRICT ebuff, float * VS_RESTRICT dftr, fftwf_complex * VS_RESTRICT dftc, fftwf_complex * VS_RESTRICT dftc2,
+static void func_0(VSFrameRef * src[3], VSFrameRef * dst, float * ebuff[3], float * VS_RESTRICT dftr, fftwf_complex * VS_RESTRICT dftc, fftwf_complex * VS_RESTRICT dftc2,
                    const DFTTestData * d, const VSAPI * vsapi) {
     for (int plane = 0; plane < d->vi->format->numPlanes; plane++) {
         if (d->process[plane]) {
@@ -404,16 +404,16 @@ static void func_0(VSFrameRef * src[3], VSFrameRef * dst, float ** VS_RESTRICT e
             const int sbd1 = d->sbsize / 2;
             const int ccnt = d->ccnt * 2;
             const bool uf0b = std::fabs(d->f0beta - 1.f) < 0.00005f ? false : true;
-            const int inc = d->type & 1 ? d->sbsize - d->sosize : 1;
+            const int inc = (d->type & 1) ? d->sbsize - d->sosize : 1;
             for (int y = 0; y < eheight; y += inc) {
                 for (int x = 0; x <= width - d->sbsize; x += inc) {
                     proc0_C<T>(srcp + x, d->hw, dftr, stride, d->sbsize, d->vi->format->bitsPerSample);
                     fftwf_execute_dft_r2c(d->ft, dftr, dftc);
                     if (d->zmean)
-                        removeMean_C(reinterpret_cast<float *>(dftc), reinterpret_cast<float *>(d->dftgc), ccnt, reinterpret_cast<float *>(dftc2));
+                        removeMean_C(reinterpret_cast<float *>(dftc), reinterpret_cast<const float *>(d->dftgc), ccnt, reinterpret_cast<float *>(dftc2));
                     d->filterCoeffs(reinterpret_cast<float *>(dftc), d->sigmas, ccnt, uf0b ? &d->f0beta : d->pmins, d->pmaxs, d->sigmas2);
                     if (d->zmean)
-                        addMean_C(reinterpret_cast<float *>(dftc), ccnt, reinterpret_cast<float *>(dftc2));
+                        addMean_C(reinterpret_cast<float *>(dftc), ccnt, reinterpret_cast<const float *>(dftc2));
                     fftwf_execute_dft_c2r(d->fti, dftc, dftr);
                     if (d->type & 1) // spatial overlapping
                         proc1_C(dftr, d->hw, ebpSaved + x, d->sbsize, width);
@@ -434,7 +434,7 @@ static void func_0(VSFrameRef * src[3], VSFrameRef * dst, float ** VS_RESTRICT e
 }
 
 template<typename T>
-static void func_1(VSFrameRef * src[15][3], VSFrameRef * dst, float ** VS_RESTRICT ebuff, float * VS_RESTRICT dftr, fftwf_complex * VS_RESTRICT dftc, fftwf_complex * VS_RESTRICT dftc2,
+static void func_1(VSFrameRef * src[15][3], VSFrameRef * dst, float * ebuff[3], float * VS_RESTRICT dftr, fftwf_complex * VS_RESTRICT dftc, fftwf_complex * VS_RESTRICT dftc2,
                    const int pos, const DFTTestData * d, const VSAPI * vsapi) {
     for (int plane = 0; plane < d->vi->format->numPlanes; plane++) {
         if (d->process[plane]) {
@@ -448,32 +448,34 @@ static void func_1(VSFrameRef * src[15][3], VSFrameRef * dst, float ** VS_RESTRI
             const int sbd1 = d->sbsize / 2;
             const int ccnt = d->ccnt * 2;
             const bool uf0b = std::fabs(d->f0beta - 1.f) < 0.00005f ? false : true;
-            const int inc = d->type & 1 ? d->sbsize - d->sosize : 1;
+            const int inc = (d->type & 1) ? d->sbsize - d->sosize : 1;
             for (int y = 0; y < eheight; y += inc) {
                 for (int x = 0; x <= width - d->sbsize; x += inc) {
                     for (int z = 0; z < d->tbsize; z++)
                         proc0_C<T>(srcp[z] + x, d->hw + d->sbsize * d->sbsize * z, dftr + d->sbsize * d->sbsize * z, stride, d->sbsize, d->vi->format->bitsPerSample);
                     fftwf_execute_dft_r2c(d->ft, dftr, dftc);
                     if (d->zmean)
-                        removeMean_C(reinterpret_cast<float *>(dftc), reinterpret_cast<float *>(d->dftgc), ccnt, reinterpret_cast<float *>(dftc2));
+                        removeMean_C(reinterpret_cast<float *>(dftc), reinterpret_cast<const float *>(d->dftgc), ccnt, reinterpret_cast<float *>(dftc2));
                     d->filterCoeffs(reinterpret_cast<float *>(dftc), d->sigmas, ccnt, uf0b ? &d->f0beta : d->pmins, d->pmaxs, d->sigmas2);
                     if (d->zmean)
-                        addMean_C(reinterpret_cast<float *>(dftc), ccnt, reinterpret_cast<float *>(dftc2));
+                        addMean_C(reinterpret_cast<float *>(dftc), ccnt, reinterpret_cast<const float *>(dftc2));
                     fftwf_execute_dft_c2r(d->fti, dftc, dftr);
                     if (d->type & 1) { // spatial overlapping
-                        if (d->type & 4) { // temporal overlapping
-                            for (int z = 0; z < d->tbsize; z++)
-                                proc1_C(dftr + z * d->barea, d->hw + z * d->barea, ebuff[z * 3 + plane] + y * width + x, d->sbsize, width);
-                        } else {
+                        // FIXME: tmode 1 is not implemented so just skip the if-else check
+                        //if (d->type & 4) { // temporal overlapping
+                        //    for (int z = 0; z < d->tbsize; z++)
+                        //        proc1_C(dftr + z * d->barea, d->hw + z * d->barea, ebuff[z * 3 + plane] + y * width + x, d->sbsize, width);
+                        //} else {
                             proc1_C(dftr + pos * d->barea, d->hw + pos * d->barea, ebuff[plane] + y * width + x, d->sbsize, width);
-                        }
+                        //}
                     } else {
-                        if (d->type & 4) { // temporal overlapping
-                            for (int z = 0; z < d->tbsize; z++)
-                                ebuff[z * 3 + plane][(y + sbd1) * width + x + sbd1] += dftr[z * d->barea + sbd1 * d->sbsize + sbd1] * d->hw[z * d->barea + sbd1 * d->sbsize + sbd1];
-                        } else {
+                        // FIXME: tmode 1 is not implemented so just skip the if-else check
+                        //if (d->type & 4) { // temporal overlapping
+                        //    for (int z = 0; z < d->tbsize; z++)
+                        //        ebuff[z * 3 + plane][(y + sbd1) * width + x + sbd1] += dftr[z * d->barea + sbd1 * d->sbsize + sbd1] * d->hw[z * d->barea + sbd1 * d->sbsize + sbd1];
+                        //} else {
                             ebuff[plane][(y + sbd1) * width + x + sbd1] = dftr[pos * d->barea + sbd1 * d->sbsize + sbd1] * d->hw[pos * d->barea + sbd1 * d->sbsize + sbd1];
-                        }
+                        //}
                     }
                 }
                 for (int q = 0; q < d->tbsize; q++)
@@ -793,7 +795,7 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
                 const int ae = std::max(d.sbsize - d.sosize, d.sosize) * 2;
                 d.padWidth[plane] = width + EXTRA(width, d.sbsize) + ae;
                 d.padHeight[plane] = height + EXTRA(height, d.sbsize) + ae;
-                d.eheight[plane] = (d.padHeight[plane] - d.sosize) / (d.sbsize - d.sosize) * (d.sbsize - d.sosize);
+                d.eheight[plane] = ((d.padHeight[plane] - d.sosize) / (d.sbsize - d.sosize)) * (d.sbsize - d.sosize);
             }
         }
     }
@@ -827,7 +829,7 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
         }
     }
     wscale = 1.f / wscale;
-    const float wscalef = d.ftype < 2 ? wscale : 1.f;
+    const float wscalef = (d.ftype < 2) ? wscale : 1.f;
     fftwf_execute_dft_r2c(ftg, dftgr, d.dftgc);
 
     d.sigmas = vs_aligned_malloc<float>((d.ccnt * 2 + 11) * sizeof(float), 32);
@@ -1053,7 +1055,7 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
             }
             fftwf_execute_dft_r2c(d.ft, dftr, dftc);
             if (d.zmean)
-                removeMean_C(reinterpret_cast<float *>(dftc), reinterpret_cast<float *>(dftgc2), d.ccnt * 2, reinterpret_cast<float *>(dftc2));
+                removeMean_C(reinterpret_cast<float *>(dftc), reinterpret_cast<const float *>(dftgc2), d.ccnt * 2, reinterpret_cast<float *>(dftc2));
             for (int h = 0; h < d.ccnt * 2; h += 2) {
                 const float psd = reinterpret_cast<float *>(dftc)[h] * reinterpret_cast<float *>(dftc)[h] + reinterpret_cast<float *>(dftc)[h + 1] * reinterpret_cast<float *>(dftc)[h + 1];
                 d.sigmas[h] += psd;
