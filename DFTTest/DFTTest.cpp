@@ -521,9 +521,13 @@ static const VSFrameRef *VS_CC dfttestGetFrame(int n, int activationReason, void
             }
         }
 
-        float * dftr = fftwf_alloc_real(d->bvolume);
-        fftwf_complex * dftc = fftwf_alloc_complex(d->ccnt + 11);
-        fftwf_complex * dftc2 = fftwf_alloc_complex(d->ccnt + 11);
+        float * dftr = vs_aligned_malloc<float>(d->bvolume * sizeof(float), 32);
+        fftwf_complex * dftc = vs_aligned_malloc<fftwf_complex>((d->ccnt + 11) * sizeof(fftwf_complex), 32);
+        fftwf_complex * dftc2 = vs_aligned_malloc<fftwf_complex>((d->ccnt + 11) * sizeof(fftwf_complex), 32);
+        if (!dftr || !dftc || !dftc2) {
+            vsapi->setFilterError("DFTTest: malloc failure (dftr/dftc/dftc2)", frameCtx);
+            return nullptr;
+        }
 
         const VSFrameRef * src0 = vsapi->getFrameFilter(n, d->node, frameCtx);
         const VSFrameRef * fr[] = { d->process[0] ? nullptr : src0, d->process[1] ? nullptr : src0, d->process[2] ? nullptr : src0 };
@@ -586,9 +590,9 @@ static const VSFrameRef *VS_CC dfttestGetFrame(int n, int activationReason, void
             if (d->process[plane])
                 vs_aligned_free(ebuff[plane]);
         }
-        fftwf_free(dftr);
-        fftwf_free(dftc);
-        fftwf_free(dftc2);
+        vs_aligned_free(dftr);
+        vs_aligned_free(dftc);
+        vs_aligned_free(dftc2);
         vsapi->freeFrame(src0);
         return dst;
     }
@@ -604,7 +608,7 @@ static void VS_CC dfttestFree(void *instanceData, VSCore *core, const VSAPI *vsa
     vs_aligned_free(d->sigmas2);
     vs_aligned_free(d->pmins);
     vs_aligned_free(d->pmaxs);
-    fftwf_free(d->dftgc);
+    vs_aligned_free(d->dftgc);
     fftwf_destroy_plan(d->ft);
     fftwf_destroy_plan(d->fti);
     delete d;
@@ -808,8 +812,14 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
     }
     createWindow(d.hw, d.tmode, d.smode, &d);
 
-    float * dftgr = fftwf_alloc_real(d.bvolume);
-    d.dftgc = fftwf_alloc_complex(d.ccnt + 11);
+    float * dftgr = vs_aligned_malloc<float>(d.bvolume * sizeof(float), 32);
+    d.dftgc = vs_aligned_malloc<fftwf_complex>((d.ccnt + 11) * sizeof(fftwf_complex), 32);
+    if (!dftgr || !d.dftgc) {
+        vsapi->setError(out, "DFTTest: malloc failure (dftgr/dftgc)");
+        vsapi->freeNode(d.node);
+        return;
+    }
+
     fftwf_plan ftg;
     if (d.tbsize > 1)
         ftg = fftwf_plan_dft_r2c_3d(d.tbsize, d.sbsize, d.sbsize, dftgr, d.dftgc, FFTW_PATIENT | FFTW_DESTROY_INPUT);
@@ -924,7 +934,13 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
         d.pmaxs[i] = d.pmax / wscale;
     }
 
-    fftwf_complex * ta = fftwf_alloc_complex(d.ccnt + 3);
+    fftwf_complex * ta = vs_aligned_malloc<fftwf_complex>((d.ccnt + 3) * sizeof(fftwf_complex), 32);
+    if (!ta) {
+        vsapi->setError(out, "DFTTest: malloc failure (ta)");
+        vsapi->freeNode(d.node);
+        return;
+    }
+
     if (d.tbsize > 1) {
         d.ft = fftwf_plan_dft_r2c_3d(d.tbsize, d.sbsize, d.sbsize, dftgr, ta, FFTW_PATIENT | FFTW_DESTROY_INPUT);
         d.fti = fftwf_plan_dft_c2r_3d(d.tbsize, d.sbsize, d.sbsize, ta, dftgr, FFTW_PATIENT | FFTW_DESTROY_INPUT);
@@ -932,8 +948,8 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
         d.ft = fftwf_plan_dft_r2c_2d(d.sbsize, d.sbsize, dftgr, ta, FFTW_PATIENT | FFTW_DESTROY_INPUT);
         d.fti = fftwf_plan_dft_c2r_2d(d.sbsize, d.sbsize, ta, dftgr, FFTW_PATIENT | FFTW_DESTROY_INPUT);
     }
-    fftwf_free(dftgr);
-    fftwf_free(ta);
+    vs_aligned_free(dftgr);
+    vs_aligned_free(ta);
 
     if (d.ftype == 0) {
         if (std::fabs(d.f0beta - 1.f) < 0.00005f)
@@ -964,9 +980,15 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
             return;
         }
         createWindow(hw2, 0, 0, &d);
-        float * dftr = fftwf_alloc_real(d.bvolume);
-        fftwf_complex * dftgc2 = fftwf_alloc_complex(d.ccnt + 11);
-        float wscale2 = 0.f, alpha = d.ftype == 0 ? 5.f : 7.f;
+        float * dftr = vs_aligned_malloc<float>(d.bvolume * sizeof(float), 32);
+        fftwf_complex * dftgc2 = vs_aligned_malloc<fftwf_complex>((d.ccnt + 11) * sizeof(fftwf_complex), 32);
+        if (!dftr || !dftgc2) {
+            vsapi->setError(out, "DFTTest: malloc failure (dftr/dftgc2)");
+            vsapi->freeNode(d.node);
+            return;
+        }
+        float wscale2 = 0.f;
+        float alpha = (d.ftype == 0) ? 5.f : 7.f;
         int w = 0;
         for (int s = 0; s < d.tbsize; s++) {
             for (int i = 0; i < d.sbsize; i++) {
@@ -1039,8 +1061,13 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
                 q++;
         }
         for (int ct = 0; ct < nnpoints; ct++) {
-            fftwf_complex * dftc = fftwf_alloc_complex(d.ccnt + 11);
-            fftwf_complex * dftc2 = fftwf_alloc_complex(d.ccnt + 11);
+            fftwf_complex * dftc = vs_aligned_malloc<fftwf_complex>((d.ccnt + 11) * sizeof(fftwf_complex), 32);
+            fftwf_complex * dftc2 = vs_aligned_malloc<fftwf_complex>((d.ccnt + 11) * sizeof(fftwf_complex), 32);
+            if (!dftc || !dftc2) {
+                vsapi->setError(out, "DFTTest: malloc failure (dftc/dftc2)");
+                vsapi->freeNode(d.node);
+                return;
+            }
             for (int z = 0; z < d.tbsize; z++) {
                 const VSFrameRef * src = vsapi->getFrame(npts[ct].fn + z, d.node, nullptr, 0);
                 const int stride = vsapi->getStride(src, npts[ct].b) / d.vi->format->bytesPerSample;
@@ -1061,12 +1088,12 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
                 d.sigmas[h] += psd;
                 d.sigmas[h + 1] += psd;
             }
-            fftwf_free(dftc);
-            fftwf_free(dftc2);
+            vs_aligned_free(dftc);
+            vs_aligned_free(dftc2);
         }
         vs_aligned_free(hw2);
-        fftwf_free(dftr);
-        fftwf_free(dftgc2);
+        vs_aligned_free(dftr);
+        vs_aligned_free(dftgc2);
         delete[] npts;
         if (nnpoints != 0) {
             const float scale = 1.f / nnpoints;
