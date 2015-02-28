@@ -263,19 +263,15 @@ static void proc1_C(const float * VS_RESTRICT s0, const float * VS_RESTRICT s1, 
 
 static void removeMean_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT dftgc, const int ccnt, float * VS_RESTRICT dftc2) {
     const float gf = dftc[0] / dftgc[0];
-    for (int h = 0; h < ccnt; h += 2) {
+    for (int h = 0; h < ccnt; h++) {
         dftc2[h] = gf * dftgc[h];
-        dftc2[h + 1] = gf * dftgc[h + 1];
         dftc[h] -= dftc2[h];
-        dftc[h + 1] -= dftc2[h + 1];
     }
 }
 
 static void addMean_C(float * VS_RESTRICT dftc, const int ccnt, const float * VS_RESTRICT dftc2) {
-    for (int h = 0; h < ccnt; h += 2) {
+    for (int h = 0; h < ccnt; h++)
         dftc[h] += dftc2[h];
-        dftc[h + 1] += dftc2[h + 1];
-    }
 }
 
 static void filter_0_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigmas, const int ccnt, const float * VS_RESTRICT pmin, const float * VS_RESTRICT pmax, const float * VS_RESTRICT sigmas2) {
@@ -296,10 +292,8 @@ static void filter_1_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigma
 }
 
 static void filter_2_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigmas, const int ccnt, const float * VS_RESTRICT pmin, const float * VS_RESTRICT pmax, const float * VS_RESTRICT sigmas2) {
-    for (int h = 0; h < ccnt; h += 2) {
+    for (int h = 0; h < ccnt; h++)
         dftc[h] *= sigmas[h];
-        dftc[h + 1] *= sigmas[h];
-    }
 }
 
 static void filter_3_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigmas, const int ccnt, const float * VS_RESTRICT pmin, const float * VS_RESTRICT pmax, const float * VS_RESTRICT sigmas2) {
