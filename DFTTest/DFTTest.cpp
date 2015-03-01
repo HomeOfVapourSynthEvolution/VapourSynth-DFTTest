@@ -28,6 +28,9 @@
 #include <fftw3.h>
 #include <vapoursynth/VapourSynth.h>
 #include <vapoursynth/VSHelper.h>
+#ifdef VS_TARGET_CPU_X86
+#include "vectorclass/vectormath_exp.h"
+#endif
 
 #define EXTRA(a,b) (((a) % (b)) ? ((b) - ((a) % (b))) : 0)
 
@@ -241,7 +244,305 @@ static float getSVal(const int pos, const int len, const float * VS_RESTRICT pv,
     return interp(pf, pv, cnt);
 }
 
-static void proc0_C_8(const uint8_t * VS_RESTRICT s0, const float * VS_RESTRICT s1, float * VS_RESTRICT d, const int p0, const int p1, const int bitsPerSample) {
+#ifdef VS_TARGET_CPU_X86
+static void proc0_8(const uint8_t * _s0, const float * _s1, float * VS_RESTRICT d, const int p0, const int p1, const int bitsPerSample) {
+    for (int u = 0; u < p1; u++) {
+        for (int v = 0; v < p1; v += 8) {
+            const Vec16uc s016uc = Vec16uc().load(_s0 + v);
+            const Vec8s s08s = Vec8s(extend_low(s016uc));
+            const Vec8i s08i = Vec8i(extend_low(s08s), extend_high(s08s));
+            const Vec8f s0 = to_float(s08i);
+            const Vec8f s1 = Vec8f().load(_s1 + v);
+            const Vec8f result = s0 * s1;
+            if (p1 - v >= 8)
+                result.store(d + v);
+            else
+                result.store_partial(p1 - v, d + v);
+        }
+        _s0 += p0;
+        _s1 += p1;
+        d += p1;
+    }
+}
+
+static void proc0_16(const uint8_t * _s0_, const float * _s1, float * VS_RESTRICT d, const int p0, const int p1, const int bitsPerSample) {
+    const uint16_t * _s0 = reinterpret_cast<const uint16_t *>(_s0_);
+    const Vec8f divisor(1.f / (1 << (bitsPerSample - 8)));
+    for (int u = 0; u < p1; u++) {
+        for (int v = 0; v < p1; v += 8) {
+            const Vec8us s08us = Vec8us().load(_s0 + v);
+            const Vec8i s08i = Vec8i(extend_low(s08us), extend_high(s08us));
+            const Vec8f s0 = to_float(s08i);
+            const Vec8f s1 = Vec8f().load(_s1 + v);
+            const Vec8f result = s0 * s1 * divisor;
+            if (p1 - v >= 8)
+                result.store(d + v);
+            else
+                result.store_partial(p1 - v, d + v);
+        }
+        _s0 += p0;
+        _s1 += p1;
+        d += p1;
+    }
+}
+
+static void proc1(const float * _s0, const float * _s1, float * VS_RESTRICT _d, const int p0, const int p1) {
+    for (int u = 0; u < p0; u++) {
+        for (int v = 0; v < p0; v += 8) {
+            const Vec8f s0 = Vec8f().load(_s0 + v);
+            const Vec8f s1 = Vec8f().load(_s1 + v);
+            const Vec8f d = Vec8f().load(_d + v);
+            const Vec8f result = mul_add(s0, s1, d);
+            if (p0 - v >= 8)
+                result.store(_d + v);
+            else
+                result.store_partial(p0 - v, _d + v);
+        }
+        _s0 += p0;
+        _s1 += p0;
+        _d += p1;
+    }
+}
+
+static void removeMean(float * VS_RESTRICT _dftc, const float * _dftgc, const int ccnt, float * VS_RESTRICT _dftc2) {
+    const Vec8f gf(_dftc[0] / _dftgc[0]);
+    for (int h = 0; h < ccnt; h += 8) {
+        const Vec8f dftgc = Vec8f().load(_dftgc + h);
+        const Vec8f dftc2 = gf * dftgc;
+        Vec8f dftc = Vec8f().load(_dftc + h);
+        dftc -= dftc2;
+        if (ccnt - h >= 8) {
+            dftc2.store(_dftc2 + h);
+            dftc.store(_dftc + h);
+        } else {
+            dftc2.store_partial(ccnt - h, _dftc2 + h);
+            dftc.store_partial(ccnt - h, _dftc + h);
+        }
+    }
+}
+
+static void addMean(float * VS_RESTRICT _dftc, const int ccnt, const float * _dftc2) {
+    for (int h = 0; h < ccnt; h += 8) {
+        Vec8f dftc = Vec8f().load(_dftc + h);
+        const Vec8f dftc2 = Vec8f().load(_dftc2 + h);
+        dftc += dftc2;
+        if (ccnt - h >= 8)
+            dftc.store(_dftc + h);
+        else
+            dftc.store_partial(ccnt - h, _dftc + h);
+    }
+}
+
+static void filter_0(float * VS_RESTRICT _dftc, const float * _sigmas, const int ccnt, const float * pmin, const float * pmax, const float * sigmas2) {
+    const Vec4f zero(0.f), epsilon(1e-15f);
+    for (int h = 0; h < ccnt; h += 8) {
+        Vec4f dftcLow = Vec4f().load(_dftc + h);
+        Vec4f dftcHigh = Vec4f().load(_dftc + h + 4);
+        Vec4f real = blend4f<0, 2, 4, 6>(dftcLow, dftcHigh);
+        Vec4f imag = blend4f<1, 3, 5, 7>(dftcLow, dftcHigh);
+        const Vec4f psd = mul_add(real, real, imag * imag);
+        const Vec4f sigmasLow = Vec4f().load(_sigmas + h);
+        const Vec4f sigmasHigh = Vec4f().load(_sigmas + h + 4);
+        const Vec4f sigmas = blend4f<0, 2, 4, 6>(sigmasLow, sigmasHigh);
+        const Vec4f coeff = max((psd - sigmas) * approx_recipr(psd + epsilon), zero);
+        real *= coeff;
+        imag *= coeff;
+        dftcLow = blend4f<0, 4, 1, 5>(real, imag);
+        dftcHigh = blend4f<2, 6, 3, 7>(real, imag);
+        const Vec8f dftc(dftcLow, dftcHigh);
+        if (ccnt - h >= 8)
+            dftc.store(_dftc + h);
+        else
+            dftc.store_partial(ccnt - h, _dftc + h);
+    }
+}
+
+static void filter_1(float * VS_RESTRICT _dftc, const float * _sigmas, const int ccnt, const float * pmin, const float * pmax, const float * sigmas2) {
+    const Vec4f zero(0.f);
+    for (int h = 0; h < ccnt; h += 8) {
+        Vec4f dftcLow = Vec4f().load(_dftc + h);
+        Vec4f dftcHigh = Vec4f().load(_dftc + h + 4);
+        Vec4f real = blend4f<0, 2, 4, 6>(dftcLow, dftcHigh);
+        Vec4f imag = blend4f<1, 3, 5, 7>(dftcLow, dftcHigh);
+        const Vec4f psd = mul_add(real, real, imag * imag);
+        const Vec4f sigmasLow = Vec4f().load(_sigmas + h);
+        const Vec4f sigmasHigh = Vec4f().load(_sigmas + h + 4);
+        const Vec4f sigmas = blend4f<0, 2, 4, 6>(sigmasLow, sigmasHigh);
+        real = select(psd < sigmas, zero, real);
+        imag = select(psd < sigmas, zero, imag);
+        dftcLow = blend4f<0, 4, 1, 5>(real, imag);
+        dftcHigh = blend4f<2, 6, 3, 7>(real, imag);
+        const Vec8f dftc(dftcLow, dftcHigh);
+        if (ccnt - h >= 8)
+            dftc.store(_dftc + h);
+        else
+            dftc.store_partial(ccnt - h, _dftc + h);
+    }
+}
+
+static void filter_2(float * VS_RESTRICT _dftc, const float * _sigmas, const int ccnt, const float * pmin, const float * pmax, const float * sigmas2) {
+    for (int h = 0; h < ccnt; h += 8) {
+        Vec8f dftc = Vec8f().load(_dftc + h);
+        const Vec8f sigmas = Vec8f().load(_sigmas + h);
+        dftc *= sigmas;
+        if (ccnt - h >= 8)
+            dftc.store(_dftc + h);
+        else
+            dftc.store_partial(ccnt - h, _dftc + h);
+    }
+}
+
+static void filter_3(float * VS_RESTRICT _dftc, const float * _sigmas, const int ccnt, const float * _pmin, const float * _pmax, const float * _sigmas2) {
+    for (int h = 0; h < ccnt; h += 8) {
+        Vec4f dftcLow = Vec4f().load(_dftc + h);
+        Vec4f dftcHigh = Vec4f().load(_dftc + h + 4);
+        Vec4f real = blend4f<0, 2, 4, 6>(dftcLow, dftcHigh);
+        Vec4f imag = blend4f<1, 3, 5, 7>(dftcLow, dftcHigh);
+        const Vec4f psd = mul_add(real, real, imag * imag);
+        const Vec4f pminLow = Vec4f().load(_pmin + h);
+        const Vec4f pminHigh = Vec4f().load(_pmin + h + 4);
+        const Vec4f pmin = blend4f<0, 2, 4, 6>(pminLow, pminHigh);
+        const Vec4f pmaxLow = Vec4f().load(_pmax + h);
+        const Vec4f pmaxHigh = Vec4f().load(_pmax + h + 4);
+        const Vec4f pmax = blend4f<0, 2, 4, 6>(pmaxLow, pmaxHigh);
+        const Vec4f sigmasLow = Vec4f().load(_sigmas + h);
+        const Vec4f sigmasHigh = Vec4f().load(_sigmas + h + 4);
+        const Vec4f sigmas = blend4f<0, 2, 4, 6>(sigmasLow, sigmasHigh);
+        const Vec4f sigmas2Low = Vec4f().load(_sigmas2 + h);
+        const Vec4f sigmas2High = Vec4f().load(_sigmas2 + h + 4);
+        const Vec4f sigmas2 = blend4f<0, 2, 4, 6>(sigmas2Low, sigmas2High);
+        real = select(psd >= pmin & psd <= pmax, real * sigmas, real * sigmas2);
+        imag = select(psd >= pmin & psd <= pmax, imag * sigmas, imag * sigmas2);
+        dftcLow = blend4f<0, 4, 1, 5>(real, imag);
+        dftcHigh = blend4f<2, 6, 3, 7>(real, imag);
+        const Vec8f dftc(dftcLow, dftcHigh);
+        if (ccnt - h >= 8)
+            dftc.store(_dftc + h);
+        else
+            dftc.store_partial(ccnt - h, _dftc + h);
+    }
+}
+
+static void filter_4(float * VS_RESTRICT _dftc, const float * _sigmas, const int ccnt, const float * _pmin, const float * _pmax, const float * sigmas2) {
+    const Vec4f epsilon(1e-15f);
+    for (int h = 0; h < ccnt; h += 8) {
+        Vec4f dftcLow = Vec4f().load(_dftc + h);
+        Vec4f dftcHigh = Vec4f().load(_dftc + h + 4);
+        Vec4f real = blend4f<0, 2, 4, 6>(dftcLow, dftcHigh);
+        Vec4f imag = blend4f<1, 3, 5, 7>(dftcLow, dftcHigh);
+        const Vec4f psd = mul_add(real, real, mul_add(imag, imag, epsilon));
+        const Vec4f sigmasLow = Vec4f().load(_sigmas + h);
+        const Vec4f sigmasHigh = Vec4f().load(_sigmas + h + 4);
+        const Vec4f sigmas = blend4f<0, 2, 4, 6>(sigmasLow, sigmasHigh);
+        const Vec4f pminLow = Vec4f().load(_pmin + h);
+        const Vec4f pminHigh = Vec4f().load(_pmin + h + 4);
+        const Vec4f pmin = blend4f<0, 2, 4, 6>(pminLow, pminHigh);
+        const Vec4f pmaxLow = Vec4f().load(_pmax + h);
+        const Vec4f pmaxHigh = Vec4f().load(_pmax + h + 4);
+        const Vec4f pmax = blend4f<0, 2, 4, 6>(pmaxLow, pmaxHigh);
+        const Vec4f mult = sigmas * sqrt(psd * pmax * approx_recipr((psd + pmin) * (psd + pmax)));
+        real *= mult;
+        imag *= mult;
+        dftcLow = blend4f<0, 4, 1, 5>(real, imag);
+        dftcHigh = blend4f<2, 6, 3, 7>(real, imag);
+        const Vec8f dftc(dftcLow, dftcHigh);
+        if (ccnt - h >= 8)
+            dftc.store(_dftc + h);
+        else
+            dftc.store_partial(ccnt - h, _dftc + h);
+    }
+}
+
+static void filter_5(float * VS_RESTRICT _dftc, const float * _sigmas, const int ccnt, const float * pmin, const float * pmax, const float * sigmas2) {
+    const Vec4f zero(0.f), epsilon(1e-15f);
+    for (int h = 0; h < ccnt; h += 8) {
+        Vec4f dftcLow = Vec4f().load(_dftc + h);
+        Vec4f dftcHigh = Vec4f().load(_dftc + h + 4);
+        Vec4f real = blend4f<0, 2, 4, 6>(dftcLow, dftcHigh);
+        Vec4f imag = blend4f<1, 3, 5, 7>(dftcLow, dftcHigh);
+        const Vec4f psd = mul_add(real, real, imag * imag);
+        const Vec4f sigmasLow = Vec4f().load(_sigmas + h);
+        const Vec4f sigmasHigh = Vec4f().load(_sigmas + h + 4);
+        const Vec4f sigmas = blend4f<0, 2, 4, 6>(sigmasLow, sigmasHigh);
+        const Vec4f coeff = pow(max((psd - sigmas) * approx_recipr(psd + epsilon), zero), pmin[0]);
+        real *= coeff;
+        imag *= coeff;
+        dftcLow = blend4f<0, 4, 1, 5>(real, imag);
+        dftcHigh = blend4f<2, 6, 3, 7>(real, imag);
+        const Vec8f dftc(dftcLow, dftcHigh);
+        if (ccnt - h >= 8)
+            dftc.store(_dftc + h);
+        else
+            dftc.store_partial(ccnt - h, _dftc + h);
+    }
+}
+
+static void filter_6(float * VS_RESTRICT _dftc, const float * _sigmas, const int ccnt, const float * pmin, const float * pmax, const float * sigmas2) {
+    const Vec4f zero(0.f), epsilon(1e-15f);
+    for (int h = 0; h < ccnt; h += 8) {
+        Vec4f dftcLow = Vec4f().load(_dftc + h);
+        Vec4f dftcHigh = Vec4f().load(_dftc + h + 4);
+        Vec4f real = blend4f<0, 2, 4, 6>(dftcLow, dftcHigh);
+        Vec4f imag = blend4f<1, 3, 5, 7>(dftcLow, dftcHigh);
+        const Vec4f psd = mul_add(real, real, imag * imag);
+        const Vec4f sigmasLow = Vec4f().load(_sigmas + h);
+        const Vec4f sigmasHigh = Vec4f().load(_sigmas + h + 4);
+        const Vec4f sigmas = blend4f<0, 2, 4, 6>(sigmasLow, sigmasHigh);
+        const Vec4f coeff = sqrt(max((psd - sigmas) * approx_recipr(psd + epsilon), zero));
+        real *= coeff;
+        imag *= coeff;
+        dftcLow = blend4f<0, 4, 1, 5>(real, imag);
+        dftcHigh = blend4f<2, 6, 3, 7>(real, imag);
+        const Vec8f dftc(dftcLow, dftcHigh);
+        if (ccnt - h >= 8)
+            dftc.store(_dftc + h);
+        else
+            dftc.store_partial(ccnt - h, _dftc + h);
+    }
+}
+
+static void intcast_8(const float * _ebp, uint8_t * VS_RESTRICT dstp, const int dstWidth, const int dstHeight, const int dstStride, const int width, const int bitsPerSample) {
+    const Vec8f pointFive(0.5f);
+    const Vec8i zero(0), peak(255);
+    for (int y = 0; y < dstHeight; y++) {
+        for (int x = 0; x < dstWidth; x += 32) {
+            Vec8f ebp = Vec8f().load(_ebp + x);
+            Vec8i result8iLow = min(max(truncate_to_int(ebp + pointFive), zero), peak);
+            ebp = Vec8f().load(_ebp + x + 8);
+            Vec8i result8iHigh = min(max(truncate_to_int(ebp + pointFive), zero), peak);
+            const Vec16s result16sLow = compress(result8iLow, result8iHigh);
+            ebp = Vec8f().load(_ebp + x + 16);
+            result8iLow = min(max(truncate_to_int(ebp + pointFive), zero), peak);
+            ebp = Vec8f().load(_ebp + x + 24);
+            result8iHigh = min(max(truncate_to_int(ebp + pointFive), zero), peak);
+            const Vec16s result16sHigh = compress(result8iLow, result8iHigh);
+            const Vec32uc result = Vec32uc(compress(result16sLow, result16sHigh));
+            result.store_a(dstp + x);
+        }
+        _ebp += width;
+        dstp += dstStride;
+    }
+}
+
+static void intcast_16(const float * _ebp, uint8_t * VS_RESTRICT _dstp, const int dstWidth, const int dstHeight, const int dstStride, const int width, const int bitsPerSample) {
+    uint16_t * VS_RESTRICT dstp = reinterpret_cast<uint16_t *>(_dstp);
+    const Vec8f multiplier(static_cast<float>(1 << (bitsPerSample - 8))), pointFive(0.5f);
+    const Vec8i zero(0), peak((1 << bitsPerSample) - 1);
+    for (int y = 0; y < dstHeight; y++) {
+        for (int x = 0; x < dstWidth; x += 16) {
+            Vec8f ebp = Vec8f().load(_ebp + x);
+            const Vec8i result8iLow = min(max(truncate_to_int(mul_add(ebp, multiplier, pointFive)), zero), peak);
+            ebp = Vec8f().load(_ebp + x + 8);
+            const Vec8i result8iHigh = min(max(truncate_to_int(mul_add(ebp, multiplier, pointFive)), zero), peak);
+            const Vec16us result = Vec16us(compress(result8iLow, result8iHigh));
+            result.store_a(dstp + x);
+        }
+        _ebp += width;
+        dstp += dstStride;
+    }
+}
+#else
+static void proc0_8(const uint8_t * s0, const float * s1, float * VS_RESTRICT d, const int p0, const int p1, const int bitsPerSample) {
     for (int u = 0; u < p1; u++) {
         for (int v = 0; v < p1; v++)
             d[v] = s0[v] * s1[v];
@@ -251,8 +552,8 @@ static void proc0_C_8(const uint8_t * VS_RESTRICT s0, const float * VS_RESTRICT 
     }
 }
 
-static void proc0_C_16(const uint8_t * VS_RESTRICT s0_, const float * VS_RESTRICT s1, float * VS_RESTRICT d, const int p0, const int p1, const int bitsPerSample) {
-    const uint16_t * VS_RESTRICT s0 = reinterpret_cast<const uint16_t *>(s0_);
+static void proc0_16(const uint8_t * _s0, const float * s1, float * VS_RESTRICT d, const int p0, const int p1, const int bitsPerSample) {
+    const uint16_t * VS_RESTRICT s0 = reinterpret_cast<const uint16_t *>(_s0);
     const float divisor = 1.f / (1 << (bitsPerSample - 8));
     for (int u = 0; u < p1; u++) {
         for (int v = 0; v < p1; v++)
@@ -263,7 +564,7 @@ static void proc0_C_16(const uint8_t * VS_RESTRICT s0_, const float * VS_RESTRIC
     }
 }
 
-static void proc1_C(const float * VS_RESTRICT s0, const float * VS_RESTRICT s1, float * VS_RESTRICT d, const int p0, const int p1) {
+static void proc1(const float * s0, const float * s1, float * VS_RESTRICT d, const int p0, const int p1) {
     for (int u = 0; u < p0; u++) {
         for (int v = 0; v < p0; v++)
             d[v] += s0[v] * s1[v];
@@ -273,7 +574,7 @@ static void proc1_C(const float * VS_RESTRICT s0, const float * VS_RESTRICT s1, 
     }
 }
 
-static void removeMean_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT dftgc, const int ccnt, float * VS_RESTRICT dftc2) {
+static void removeMean(float * VS_RESTRICT dftc, const float * dftgc, const int ccnt, float * VS_RESTRICT dftc2) {
     const float gf = dftc[0] / dftgc[0];
     for (int h = 0; h < ccnt; h++) {
         dftc2[h] = gf * dftgc[h];
@@ -281,12 +582,12 @@ static void removeMean_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT dft
     }
 }
 
-static void addMean_C(float * VS_RESTRICT dftc, const int ccnt, const float * VS_RESTRICT dftc2) {
+static void addMean(float * VS_RESTRICT dftc, const int ccnt, const float * dftc2) {
     for (int h = 0; h < ccnt; h++)
         dftc[h] += dftc2[h];
 }
 
-static void filter_0_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigmas, const int ccnt, const float * VS_RESTRICT pmin, const float * VS_RESTRICT pmax, const float * VS_RESTRICT sigmas2) {
+static void filter_0(float * VS_RESTRICT dftc, const float * sigmas, const int ccnt, const float * pmin, const float * pmax, const float * sigmas2) {
     for (int h = 0; h < ccnt; h += 2) {
         const float psd = dftc[h] * dftc[h] + dftc[h + 1] * dftc[h + 1];
         const float coeff = std::max((psd - sigmas[h]) / (psd + 1e-15f), 0.f);
@@ -295,7 +596,7 @@ static void filter_0_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigma
     }
 }
 
-static void filter_1_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigmas, const int ccnt, const float * VS_RESTRICT pmin, const float * VS_RESTRICT pmax, const float * VS_RESTRICT sigmas2) {
+static void filter_1(float * VS_RESTRICT dftc, const float * sigmas, const int ccnt, const float * pmin, const float * pmax, const float * sigmas2) {
     for (int h = 0; h < ccnt; h += 2) {
         const float psd = dftc[h] * dftc[h] + dftc[h + 1] * dftc[h + 1];
         if (psd < sigmas[h])
@@ -303,12 +604,12 @@ static void filter_1_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigma
     }
 }
 
-static void filter_2_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigmas, const int ccnt, const float * VS_RESTRICT pmin, const float * VS_RESTRICT pmax, const float * VS_RESTRICT sigmas2) {
+static void filter_2(float * VS_RESTRICT dftc, const float * sigmas, const int ccnt, const float * pmin, const float * pmax, const float * sigmas2) {
     for (int h = 0; h < ccnt; h++)
         dftc[h] *= sigmas[h];
 }
 
-static void filter_3_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigmas, const int ccnt, const float * VS_RESTRICT pmin, const float * VS_RESTRICT pmax, const float * VS_RESTRICT sigmas2) {
+static void filter_3(float * VS_RESTRICT dftc, const float * sigmas, const int ccnt, const float * pmin, const float * pmax, const float * sigmas2) {
     for (int h = 0; h < ccnt; h += 2) {
         const float psd = dftc[h] * dftc[h] + dftc[h + 1] * dftc[h + 1];
         if (psd >= pmin[h] && psd <= pmax[h]) {
@@ -321,7 +622,7 @@ static void filter_3_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigma
     }
 }
 
-static void filter_4_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigmas, const int ccnt, const float * VS_RESTRICT pmin, const float * VS_RESTRICT pmax, const float * VS_RESTRICT sigmas2) {
+static void filter_4(float * VS_RESTRICT dftc, const float * sigmas, const int ccnt, const float * pmin, const float * pmax, const float * sigmas2) {
     for (int h = 0; h < ccnt; h += 2) {
         const float psd = dftc[h] * dftc[h] + dftc[h + 1] * dftc[h + 1] + 1e-15f;
         const float mult = sigmas[h] * std::sqrt(psd * pmax[h] / ((psd + pmin[h]) * (psd + pmax[h])));
@@ -330,7 +631,7 @@ static void filter_4_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigma
     }
 }
 
-static void filter_5_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigmas, const int ccnt, const float * VS_RESTRICT pmin, const float * VS_RESTRICT pmax, const float * VS_RESTRICT sigmas2) {
+static void filter_5(float * VS_RESTRICT dftc, const float * sigmas, const int ccnt, const float * pmin, const float * pmax, const float * sigmas2) {
     const float beta = pmin[0];
     for (int h = 0; h < ccnt; h += 2) {
         const float psd = dftc[h] * dftc[h] + dftc[h + 1] * dftc[h + 1];
@@ -340,7 +641,7 @@ static void filter_5_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigma
     }
 }
 
-static void filter_6_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigmas, const int ccnt, const float * VS_RESTRICT pmin, const float * VS_RESTRICT pmax, const float * VS_RESTRICT sigmas2) {
+static void filter_6(float * VS_RESTRICT dftc, const float * sigmas, const int ccnt, const float * pmin, const float * pmax, const float * sigmas2) {
     for (int h = 0; h < ccnt; h += 2) {
         const float psd = dftc[h] * dftc[h] + dftc[h + 1] * dftc[h + 1];
         const float coeff = std::sqrt(std::max((psd - sigmas[h]) / (psd + 1e-15f), 0.f));
@@ -348,6 +649,28 @@ static void filter_6_C(float * VS_RESTRICT dftc, const float * VS_RESTRICT sigma
         dftc[h + 1] *= coeff;
     }
 }
+
+static void intcast_8(const float * ebp, uint8_t * VS_RESTRICT dstp, const int dstWidth, const int dstHeight, const int dstStride, const int width, const int bitsPerSample) {
+    for (int y = 0; y < dstHeight; y++) {
+        for (int x = 0; x < dstWidth; x++)
+            dstp[x] = std::min(std::max(static_cast<int>(ebp[x] + 0.5f), 0), 255);
+        ebp += width;
+        dstp += dstStride;
+    }
+}
+
+static void intcast_16(const float * ebp, uint8_t * VS_RESTRICT _dstp, const int dstWidth, const int dstHeight, const int dstStride, const int width, const int bitsPerSample) {
+    uint16_t * VS_RESTRICT dstp = reinterpret_cast<uint16_t *>(_dstp);
+    const float multiplier = static_cast<float>(1 << (bitsPerSample - 8));
+    const int peak = (1 << bitsPerSample) - 1;
+    for (int y = 0; y < dstHeight; y++) {
+        for (int x = 0; x < dstWidth; x++)
+            dstp[x] = std::min(std::max(static_cast<int>(ebp[x] * multiplier + 0.5f), 0), peak);
+        ebp += width;
+        dstp += dstStride;
+    }
+}
+#endif
 
 template<typename T>
 static void copyPad(const VSFrameRef * src, VSFrameRef * dst[3], const DFTTestData * d, const VSAPI * vsapi) {
@@ -384,27 +707,6 @@ static void copyPad(const VSFrameRef * src, VSFrameRef * dst[3], const DFTTestDa
     }
 }
 
-static void intcast_C_8(const float * VS_RESTRICT ebp, uint8_t * VS_RESTRICT dstp, const int dstWidth, const int dstHeight, const int dstStride, const int width, const int bitsPerSample) {
-    for (int y = 0; y < dstHeight; y++) {
-        for (int x = 0; x < dstWidth; x++)
-            dstp[x] = std::min(std::max(static_cast<int>(ebp[x] + 0.5f), 0), 255);
-        ebp += width;
-        dstp += dstStride;
-    }
-}
-
-static void intcast_C_16(const float * VS_RESTRICT ebp, uint8_t * VS_RESTRICT dstp_, const int dstWidth, const int dstHeight, const int dstStride, const int width, const int bitsPerSample) {
-    uint16_t * VS_RESTRICT dstp = reinterpret_cast<uint16_t *>(dstp_);
-    const float multiplier = static_cast<float>(1 << (bitsPerSample - 8));
-    const int peak = (1 << bitsPerSample) - 1;
-    for (int y = 0; y < dstHeight; y++) {
-        for (int x = 0; x < dstWidth; x++)
-            dstp[x] = std::min(std::max(static_cast<int>(ebp[x] * multiplier + 0.5f), 0), peak);
-        ebp += width;
-        dstp += dstStride;
-    }
-}
-
 template<typename T>
 static void func_0(VSFrameRef * src[3], VSFrameRef * dst, float * ebuff[3], float * VS_RESTRICT dftr, fftwf_complex * VS_RESTRICT dftc, fftwf_complex * VS_RESTRICT dftc2,
                    const DFTTestData * d, const VSAPI * vsapi) {
@@ -425,13 +727,13 @@ static void func_0(VSFrameRef * src[3], VSFrameRef * dst, float * ebuff[3], floa
                     d->proc0(reinterpret_cast<const uint8_t *>(srcp + x), d->hw, dftr, stride, d->sbsize, d->vi->format->bitsPerSample);
                     fftwf_execute_dft_r2c(d->ft, dftr, dftc);
                     if (d->zmean)
-                        removeMean_C(reinterpret_cast<float *>(dftc), reinterpret_cast<const float *>(d->dftgc), ccnt, reinterpret_cast<float *>(dftc2));
+                        removeMean(reinterpret_cast<float *>(dftc), reinterpret_cast<const float *>(d->dftgc), ccnt, reinterpret_cast<float *>(dftc2));
                     d->filterCoeffs(reinterpret_cast<float *>(dftc), d->sigmas, ccnt, uf0b ? &d->f0beta : d->pmins, d->pmaxs, d->sigmas2);
                     if (d->zmean)
-                        addMean_C(reinterpret_cast<float *>(dftc), ccnt, reinterpret_cast<const float *>(dftc2));
+                        addMean(reinterpret_cast<float *>(dftc), ccnt, reinterpret_cast<const float *>(dftc2));
                     fftwf_execute_dft_c2r(d->fti, dftc, dftr);
                     if (d->type & 1) // spatial overlapping
-                        proc1_C(dftr, d->hw, ebpSaved + x, d->sbsize, width);
+                        proc1(dftr, d->hw, ebpSaved + x, d->sbsize, width);
                     else
                         ebpSaved[x + sbd1 * width + sbd1] = dftr[sbd1 * d->sbsize + sbd1] * d->hw[sbd1 * d->sbsize + sbd1];
                 }
@@ -471,10 +773,10 @@ static void func_1(VSFrameRef * src[15][3], VSFrameRef * dst, float * ebuff[3], 
                                  stride, d->sbsize, d->vi->format->bitsPerSample);
                     fftwf_execute_dft_r2c(d->ft, dftr, dftc);
                     if (d->zmean)
-                        removeMean_C(reinterpret_cast<float *>(dftc), reinterpret_cast<const float *>(d->dftgc), ccnt, reinterpret_cast<float *>(dftc2));
+                        removeMean(reinterpret_cast<float *>(dftc), reinterpret_cast<const float *>(d->dftgc), ccnt, reinterpret_cast<float *>(dftc2));
                     d->filterCoeffs(reinterpret_cast<float *>(dftc), d->sigmas, ccnt, uf0b ? &d->f0beta : d->pmins, d->pmaxs, d->sigmas2);
                     if (d->zmean)
-                        addMean_C(reinterpret_cast<float *>(dftc), ccnt, reinterpret_cast<const float *>(dftc2));
+                        addMean(reinterpret_cast<float *>(dftc), ccnt, reinterpret_cast<const float *>(dftc2));
                     fftwf_execute_dft_c2r(d->fti, dftc, dftr);
                     if (d->type & 1) { // spatial overlapping
                         // FIXME: tmode 1 is not implemented so just skip the if-else check
@@ -482,7 +784,7 @@ static void func_1(VSFrameRef * src[15][3], VSFrameRef * dst, float * ebuff[3], 
                         //    for (int z = 0; z < d->tbsize; z++)
                         //        proc1_C(dftr + z * d->barea, d->hw + z * d->barea, ebuff[z * 3 + plane] + y * width + x, d->sbsize, width);
                         //} else {
-                            proc1_C(dftr + pos * d->barea, d->hw + pos * d->barea, ebuff[plane] + y * width + x, d->sbsize, width);
+                            proc1(dftr + pos * d->barea, d->hw + pos * d->barea, ebuff[plane] + y * width + x, d->sbsize, width);
                         //}
                     } else {
                         // FIXME: tmode 1 is not implemented so just skip the if-else check
@@ -525,6 +827,10 @@ static const VSFrameRef *VS_CC dfttestGetFrame(int n, int activationReason, void
                 vsapi->requestFrameFilter(i, d->node, frameCtx);
         }
     } else if (activationReason == arAllFramesReady) {
+#ifdef VS_TARGET_CPU_X86
+        no_subnormals();
+#endif
+
         float * ebuff[3];
         for (int plane = 0; plane < d->vi->format->numPlanes; plane++) {
             if (d->process[plane]) {
@@ -631,6 +937,10 @@ static void VS_CC dfttestFree(void *instanceData, VSCore *core, const VSAPI *vsa
 }
 
 static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
+#ifdef VS_TARGET_CPU_X86
+    no_subnormals();
+#endif
+
     DFTTestData d;
     int err;
 
@@ -968,28 +1278,28 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
     vs_aligned_free(ta);
 
     if (d.vi->format->bitsPerSample == 8) {
-        d.proc0 = proc0_C_8;
-        d.intcast = intcast_C_8;
+        d.proc0 = proc0_8;
+        d.intcast = intcast_8;
     } else {
-        d.proc0 = proc0_C_16;
-        d.intcast = intcast_C_16;
+        d.proc0 = proc0_16;
+        d.intcast = intcast_16;
     }
 
     if (d.ftype == 0) {
         if (std::fabs(d.f0beta - 1.f) < 0.00005f)
-            d.filterCoeffs = filter_0_C;
+            d.filterCoeffs = filter_0;
         else if (std::fabs(d.f0beta - 0.5f) < 0.00005f)
-            d.filterCoeffs = filter_6_C;
+            d.filterCoeffs = filter_6;
         else
-            d.filterCoeffs = filter_5_C;
+            d.filterCoeffs = filter_5;
     } else if (d.ftype == 1) {
-        d.filterCoeffs = filter_1_C;
+        d.filterCoeffs = filter_1;
     } else if (d.ftype == 2) {
-        d.filterCoeffs = filter_2_C;
+        d.filterCoeffs = filter_2;
     } else if (d.ftype == 3) {
-        d.filterCoeffs = filter_3_C;
+        d.filterCoeffs = filter_3;
     } else {
-        d.filterCoeffs = filter_4_C;
+        d.filterCoeffs = filter_4;
     }
 
     if (d.ftype != 0)
@@ -1106,7 +1416,7 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
             }
             fftwf_execute_dft_r2c(d.ft, dftr, dftc);
             if (d.zmean)
-                removeMean_C(reinterpret_cast<float *>(dftc), reinterpret_cast<const float *>(dftgc2), d.ccnt * 2, reinterpret_cast<float *>(dftc2));
+                removeMean(reinterpret_cast<float *>(dftc), reinterpret_cast<const float *>(dftgc2), d.ccnt * 2, reinterpret_cast<float *>(dftc2));
             for (int h = 0; h < d.ccnt * 2; h += 2) {
                 const float psd = reinterpret_cast<float *>(dftc)[h] * reinterpret_cast<float *>(dftc)[h] + reinterpret_cast<float *>(dftc)[h + 1] * reinterpret_cast<float *>(dftc)[h + 1];
                 d.sigmas[h] += psd;
