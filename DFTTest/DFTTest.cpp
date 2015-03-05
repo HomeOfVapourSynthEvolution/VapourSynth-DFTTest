@@ -967,7 +967,7 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
         d.sosize = 9;
     d.tbsize = int64ToIntS(vsapi->propGetInt(in, "tbsize", 0, &err));
     if (err)
-        d.tbsize = 5;
+        d.tbsize = 3;
     d.tmode = int64ToIntS(vsapi->propGetInt(in, "tmode", 0, &err));
     d.tosize = int64ToIntS(vsapi->propGetInt(in, "tosize", 0, &err));
     d.swin = int64ToIntS(vsapi->propGetInt(in, "swin", 0, &err));
