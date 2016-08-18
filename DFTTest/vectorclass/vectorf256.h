@@ -1,8 +1,8 @@
 /****************************  vectorf256.h   *******************************
 * Author:        Agner Fog
 * Date created:  2012-05-30
-* Last modified: 2015-11-27
-* Version:       1.20
+* Last modified: 2016-04-26
+* Version:       1.22
 * Project:       vector classes
 * Description:
 * Header file defining 256-bit floating point vector classes as interface
@@ -27,7 +27,7 @@
 *
 * For detailed instructions, see VectorClass.pdf
 *
-* (c) Copyright 2012 - 2015 GNU General Public License http://www.gnu.org/licenses
+* (c) Copyright 2012 - 2016 GNU General Public License http://www.gnu.org/licenses
 *****************************************************************************/
 
 // check combination of header files
@@ -44,7 +44,9 @@
 
 #include "vectorf128.h"  // Define 128-bit vectors
 
-
+#ifdef VCL_NAMESPACE
+namespace VCL_NAMESPACE {
+#endif
 
 /*****************************************************************************
 *
@@ -571,26 +573,30 @@ public:
         return ymm;
     }
     // Member function to load from array (unaligned)
-    Vec8f & load(float const * p) {
-        ymm = _mm256_loadu_ps(p);
+    Vec8f & load(void const * p) {
+        ymm = _mm256_loadu_ps((float const *)p);
         return *this;
     }
     // Member function to load from array, aligned by 32
     // You may use load_a instead of load if you are certain that p points to an address
     // divisible by 32.
-    Vec8f & load_a(float const * p) {
-        ymm = _mm256_load_ps(p);
+    Vec8f & load_a(void const * p) {
+        ymm = _mm256_load_ps((float const *)p);
         return *this;
     }
     // Member function to store into array (unaligned)
-    void store(float * p) const {
-        _mm256_storeu_ps(p, ymm);
+    void store(void * p) const {
+        _mm256_storeu_ps((float *)p, ymm);
     }
     // Member function to store into array, aligned by 32
     // You may use store_a instead of store if you are certain that p points to an address
     // divisible by 32.
-    void store_a(float * p) const {
-        _mm256_store_ps(p, ymm);
+    void store_a(void * p) const {
+        _mm256_store_ps((float *)p, ymm);
+    }
+    // Member function to store into array using a non-temporal memory hint, aligned by 32
+    void stream(void * p) const {
+        _mm256_stream_ps((float *)p, ymm);
     }
     // Partial load. Load n elements and set the rest to 0
     Vec8f & load_partial(int n, float const * p) {
@@ -872,6 +878,10 @@ static inline Vec8fb operator ! (Vec8f const & a) {
 *          Functions for Vec8f
 *
 *****************************************************************************/
+
+static inline Vec8f setzero_8f() {
+    return _mm256_setzero_ps();
+}
 
 // Select between two operands. Corresponds to this pseudocode:
 // for (int i = 0; i < 8; i++) result[i] = s[i] ? a[i] : b[i];
@@ -3162,5 +3172,9 @@ static inline uint8_t to_bits(Vec4db const & x) {
 static inline Vec4db to_Vec4db(uint8_t x) {
     return Vec4db(to_Vec4qb(x));
 }
+
+#ifdef VCL_NAMESPACE
+}
+#endif
 
 #endif // VECTORF256_H

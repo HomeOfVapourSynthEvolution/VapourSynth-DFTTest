@@ -1,8 +1,8 @@
 /****************************  vectori256e.h   *******************************
 * Author:        Agner Fog
 * Date created:  2012-05-30
-* Last modified: 2014-10-16
-* Version:       1.16
+* Last modified: 2016-04-26
+* Version:       1.22
 * Project:       vector classes
 * Description:
 * Header file defining 256-bit integer point vector classes as interface
@@ -25,7 +25,7 @@
 *
 * For detailed instructions, see VectorClass.pdf
 *
-* (c) Copyright 2012 - 2014 GNU General Public License http://www.gnu.org/licenses
+* (c) Copyright 2012 - 2016 GNU General Public License http://www.gnu.org/licenses
 *****************************************************************************/
 
 // check combination of header files
@@ -43,6 +43,9 @@
 
 #include "vectori128.h"
 
+#ifdef VCL_NAMESPACE
+namespace VCL_NAMESPACE {
+#endif
 
 /*****************************************************************************
 *
@@ -122,6 +125,11 @@ public:
     void store_a(void * p) const {
         _mm_store_si128((__m128i*)p,     y0);
         _mm_store_si128((__m128i*)p + 1, y1);
+    }
+    // Member function to store into array using a non-temporal memory hint, aligned by 32
+    void stream(void * p) const {
+        _mm_stream_si128((__m128i*)p,     y0);
+        _mm_stream_si128((__m128i*)p + 1, y1);
     }
     // Member function to change a single bit
     // Note: This function is inefficient. Use load function if changing more than one bit
@@ -208,6 +216,10 @@ static inline Vec256b & operator ^= (Vec256b & a, Vec256b const & b) {
 }
 
 // Define functions for this class
+
+static inline Vec256b setzero_256b() {
+    return Vec256b(_mm_setzero_si128(), _mm_setzero_si128());
+}
 
 // function andnot: a & ~ b
 static inline Vec256b andnot (Vec256b const & a, Vec256b const & b) {
@@ -325,7 +337,7 @@ public:
             *this = Vec32c(Vec16c().load_partial(n, p), 0);
         }
         else if (n < 32) {
-            *this = Vec32c(Vec16c().load(p), Vec16c().load_partial(n-16, (char*)p+16));
+            *this = Vec32c(Vec16c().load(p), Vec16c().load_partial(n-16, (char const*)p+16));
         }
         else {
             load(p);
@@ -1040,7 +1052,7 @@ public:
             *this = Vec16s(Vec8s().load_partial(n, p), 0);
         }
         else if (n < 16) {
-            *this = Vec16s(Vec8s().load(p), Vec8s().load_partial(n-8, (int16_t*)p+8));
+            *this = Vec16s(Vec8s().load(p), Vec8s().load_partial(n-8, (int16_t const*)p+8));
         }
         else {
             load(p);
@@ -1742,7 +1754,7 @@ public:
             *this = Vec8i(Vec4i().load_partial(n, p), 0);
         }
         else if (n < 8) {
-            *this = Vec8i(Vec4i().load(p), Vec4i().load_partial(n-4, (int32_t*)p+4));
+            *this = Vec8i(Vec4i().load(p), Vec4i().load_partial(n-4, (int32_t const*)p+4));
         }
         else {
             load(p);
@@ -2447,7 +2459,7 @@ public:
             *this = Vec4q(Vec2q().load_partial(n, p), 0);
         }
         else if (n < 4) {
-            *this = Vec4q(Vec2q().load(p), Vec2q().load_partial(n-2, (int64_t*)p+2));
+            *this = Vec4q(Vec2q().load(p), Vec2q().load_partial(n-2, (int64_t const*)p+2));
         }
         else {
             load(p);
@@ -3973,6 +3985,10 @@ static inline Vec32c compress_saturated (Vec16s const & low, Vec16s const & high
     return Vec32c(compress_saturated(low.get_low(),low.get_high()), compress_saturated(high.get_low(),high.get_high()));
 }
 
+static inline Vec32uc compress_saturated_s2u (Vec16s const & low, Vec16s const & high) {
+    return Vec32uc(compress_saturated_s2u(low.get_low(),low.get_high()), compress_saturated_s2u(high.get_low(),high.get_high()));
+}
+
 // Function compress : packs two vectors of 16-bit integers to one vector of 8-bit integers
 // Unsigned, overflow wraps around
 static inline Vec32uc compress (Vec16us const & low, Vec16us const & high) {
@@ -3997,6 +4013,10 @@ static inline Vec16s compress (Vec8i const & low, Vec8i const & high) {
 // Signed with saturation
 static inline Vec16s compress_saturated (Vec8i const & low, Vec8i const & high) {
     return Vec16s(compress_saturated(low.get_low(),low.get_high()), compress_saturated(high.get_low(),high.get_high()));
+}
+
+static inline Vec16us compress_saturated_s2u (Vec8i const & low, Vec8i const & high) {
+    return Vec16us(compress_saturated_s2u(low.get_low(),low.get_high()), compress_saturated_s2u(high.get_low(),high.get_high()));
 }
 
 // Function compress : packs two vectors of 32-bit integers into one vector of 16-bit integers
@@ -4328,5 +4348,9 @@ static inline uint8_t to_bits(Vec4qb const & x) {
 static inline Vec4qb to_Vec4qb(uint8_t x) {
     return Vec4q(to_Vec2qb(x), to_Vec2qb(x>>2));
 }
+
+#ifdef VCL_NAMESPACE
+}
+#endif
 
 #endif // VECTORI256_H
