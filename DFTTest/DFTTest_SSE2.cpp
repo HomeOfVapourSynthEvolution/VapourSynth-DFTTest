@@ -66,6 +66,24 @@ static inline void proc1(const float * _s0, const float * _s1, float * _d, const
     }
 }
 
+static inline void proc1Partial(const float * _s0, const float * _s1, float * _d, const int p0, const int p1) noexcept {
+    for (int u = 0; u < p0; u++) {
+        for (int v = 0; v < p0; v += 4) {
+            const Vec4f s0 = Vec4f().load(_s0 + v);
+            const Vec4f s1 = Vec4f().load(_s1 + v);
+            const Vec4f d = Vec4f().load(_d + v);
+            if (p0 - v >= 4)
+                mul_add(s0, s1, d).store(_d + v);
+            else
+                mul_add(s0, s1, d).store_partial(p0 - v, _d + v);
+        }
+
+        _s0 += p0;
+        _s1 += p0;
+        _d += p1;
+    }
+}
+
 static inline void removeMean(float * _dftc, const float * _dftgc, const int ccnt, float * _dftc2) noexcept {
     const Vec4f gf = _dftc[0] / _dftgc[0];
 
@@ -348,10 +366,14 @@ void func_0_sse2(VSFrameRef * src[3], VSFrameRef * dst, const DFTTestData * d, c
                         addMean(reinterpret_cast<float *>(dftc), d->ccnt2, reinterpret_cast<const float *>(dftc2));
                     fftwf_execute_dft_c2r(d->fti, dftc, dftr);
 
-                    if (d->type & 1) // spatial overlapping
-                        proc1(dftr, d->hw, ebpSaved + x, d->sbsize, ebpStride);
-                    else
+                    if (d->type & 1) { // spatial overlapping
+                        if (!(d->sbsize & 3))
+                            proc1(dftr, d->hw, ebpSaved + x, d->sbsize, ebpStride);
+                        else
+                            proc1Partial(dftr, d->hw, ebpSaved + x, d->sbsize, ebpStride);
+                    } else {
                         ebpSaved[x + d->sbd1 * ebpStride + d->sbd1] = dftr[d->sbd1 * d->sbsize + d->sbd1] * d->hw[d->sbd1 * d->sbsize + d->sbd1];
+                    }
                 }
 
                 srcp += srcStride * d->inc;
@@ -408,10 +430,14 @@ void func_1_sse2(VSFrameRef * src[15][3], VSFrameRef * dst, const int pos, const
                         addMean(reinterpret_cast<float *>(dftc), d->ccnt2, reinterpret_cast<const float *>(dftc2));
                     fftwf_execute_dft_c2r(d->fti, dftc, dftr);
 
-                    if (d->type & 1) // spatial overlapping
-                        proc1(dftr + pos * d->barea, d->hw + pos * d->barea, ebuff + y * ebpStride + x, d->sbsize, ebpStride);
-                    else
+                    if (d->type & 1) { // spatial overlapping
+                        if (!(d->sbsize & 3))
+                            proc1(dftr + pos * d->barea, d->hw + pos * d->barea, ebuff + y * ebpStride + x, d->sbsize, ebpStride);
+                        else
+                            proc1Partial(dftr + pos * d->barea, d->hw + pos * d->barea, ebuff + y * ebpStride + x, d->sbsize, ebpStride);
+                    } else {
                         ebuff[(y + d->sbd1) * ebpStride + x + d->sbd1] = dftr[pos * d->barea + d->sbd1 * d->sbsize + d->sbd1] * d->hw[pos * d->barea + d->sbd1 * d->sbsize + d->sbd1];
+                    }
                 }
 
                 for (int q = 0; q < d->tbsize; q++)
