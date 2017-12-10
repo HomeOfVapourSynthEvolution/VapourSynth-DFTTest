@@ -305,3 +305,15 @@ opt -
         1 - use c
         2 - use sse2
 ```
+
+
+Compilation
+===========
+
+Requires `fftw3f`.
+
+```
+./autogen.sh
+./configure
+make
+```
