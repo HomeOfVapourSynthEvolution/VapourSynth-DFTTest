@@ -831,11 +831,11 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
         float sigma = static_cast<float>(vsapi->propGetFloat(in, "sigma", 0, &err));
         if (err)
-            sigma = 5.f;
+            sigma = 8.f;
 
         float sigma2 = static_cast<float>(vsapi->propGetFloat(in, "sigma2", 0, &err));
         if (err)
-            sigma2 = 5.f;
+            sigma2 = 8.f;
 
         const float pmin = static_cast<float>(vsapi->propGetFloat(in, "pmin", 0, &err));
 
