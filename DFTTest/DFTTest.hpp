@@ -25,6 +25,7 @@ struct DFTTestData {
     std::unordered_map<std::thread::id, VSFrameRef *> ebuff;
     std::unordered_map<std::thread::id, float *> dftr;
     std::unordered_map<std::thread::id, fftwf_complex *> dftc, dftc2;
+    void (*copyPad)(const VSFrameRef *, VSFrameRef *[3], const DFTTestData *, const VSAPI *) noexcept;
     void (*filterCoeffs)(float *, const float *, const int, const float *, const float *, const float *) noexcept;
     void (*func_0)(VSFrameRef *[3], VSFrameRef *, const DFTTestData *, const VSAPI *) noexcept;
     void (*func_1)(VSFrameRef *[15][3], VSFrameRef *, const int, const DFTTestData *, const VSAPI *) noexcept;

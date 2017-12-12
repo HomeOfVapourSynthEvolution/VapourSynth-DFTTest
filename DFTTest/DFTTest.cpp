@@ -619,12 +619,15 @@ static void selectFunctions(const unsigned ftype, const unsigned opt, DFTTestDat
     }
 
     if (d->vi->format->bytesPerSample == 1) {
+        d->copyPad = copyPad<uint8_t>;
         d->func_0 = func_0_c<uint8_t>;
         d->func_1 = func_1_c<uint8_t>;
     } else if (d->vi->format->bytesPerSample == 2) {
+        d->copyPad = copyPad<uint16_t>;
         d->func_0 = func_0_c<uint16_t>;
         d->func_1 = func_1_c<uint16_t>;
     } else {
+        d->copyPad = copyPad<float>;
         d->func_0 = func_0_c<float>;
         d->func_1 = func_1_c<float>;
     }
@@ -728,16 +731,8 @@ static const VSFrameRef *VS_CC dfttestGetFrame(int n, int activationReason, void
                     pad[plane] = vsapi->newVideoFrame(d->padFormat, d->padWidth[plane], d->padHeight[plane], nullptr, core);
             }
 
-            if (d->vi->format->bytesPerSample == 1) {
-                copyPad<uint8_t>(src, pad, d, vsapi);
-                d->func_0(pad, dst, d, vsapi);
-            } else if (d->vi->format->bytesPerSample == 2) {
-                copyPad<uint16_t>(src, pad, d, vsapi);
-                d->func_0(pad, dst, d, vsapi);
-            } else {
-                copyPad<float>(src, pad, d, vsapi);
-                d->func_0(pad, dst, d, vsapi);
-            }
+            d->copyPad(src, pad, d, vsapi);
+            d->func_0(pad, dst, d, vsapi);
 
             vsapi->freeFrame(src);
             for (int plane = 0; plane < d->vi->format->numPlanes; plane++)
@@ -756,20 +751,10 @@ static const VSFrameRef *VS_CC dfttestGetFrame(int n, int activationReason, void
                         pad[i - n + pos][plane] = vsapi->newVideoFrame(d->padFormat, d->padWidth[plane], d->padHeight[plane], nullptr, core);
                 }
 
-                if (d->vi->format->bytesPerSample == 1)
-                    copyPad<uint8_t>(src[i - n + pos], pad[i - n + pos], d, vsapi);
-                else if (d->vi->format->bytesPerSample == 2)
-                    copyPad<uint16_t>(src[i - n + pos], pad[i - n + pos], d, vsapi);
-                else
-                    copyPad<float>(src[i - n + pos], pad[i - n + pos], d, vsapi);
+                d->copyPad(src[i - n + pos], pad[i - n + pos], d, vsapi);
             }
 
-            if (d->vi->format->bytesPerSample == 1)
-                d->func_1(pad, dst, pos, d, vsapi);
-            else if (d->vi->format->bytesPerSample == 2)
-                d->func_1(pad, dst, pos, d, vsapi);
-            else
-                d->func_1(pad, dst, pos, d, vsapi);
+            d->func_1(pad, dst, pos, d, vsapi);
 
             for (int i = n - pos; i <= n + pos; i++) {
                 vsapi->freeFrame(src[i - n + pos]);
