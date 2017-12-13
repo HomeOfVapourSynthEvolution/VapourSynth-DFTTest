@@ -67,16 +67,22 @@ static inline void proc1(const float * _s0, const float * _s1, float * _d, const
 }
 
 static inline void proc1Partial(const float * _s0, const float * _s1, float * _d, const int p0, const int p1) noexcept {
+    const int regularPart = p0 & -4;
+
     for (int u = 0; u < p0; u++) {
-        for (int v = 0; v < p0; v += 4) {
+        int v;
+
+        for (v = 0; v < regularPart; v += 4) {
             const Vec4f s0 = Vec4f().load(_s0 + v);
             const Vec4f s1 = Vec4f().load(_s1 + v);
             const Vec4f d = Vec4f().load(_d + v);
-            if (p0 - v >= 4)
-                mul_add(s0, s1, d).store(_d + v);
-            else
-                mul_add(s0, s1, d).store_partial(p0 - v, _d + v);
+            mul_add(s0, s1, d).store(_d + v);
         }
+
+        const Vec4f s0 = Vec4f().load(_s0 + v);
+        const Vec4f s1 = Vec4f().load(_s1 + v);
+        const Vec4f d = Vec4f().load(_d + v);
+        mul_add(s0, s1, d).store_partial(p0 - v, _d + v);
 
         _s0 += p0;
         _s1 += p0;
