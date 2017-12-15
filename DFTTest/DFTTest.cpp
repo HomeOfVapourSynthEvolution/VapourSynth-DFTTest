@@ -861,7 +861,7 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
         d->sbsize = int64ToIntS(vsapi->propGetInt(in, "sbsize", 0, &err));
         if (err)
-            d->sbsize = 12;
+            d->sbsize = 16;
 
         int smode = int64ToIntS(vsapi->propGetInt(in, "smode", 0, &err));
         if (err)
@@ -869,7 +869,7 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
         d->sosize = int64ToIntS(vsapi->propGetInt(in, "sosize", 0, &err));
         if (err)
-            d->sosize = 9;
+            d->sosize = 12;
 
         d->tbsize = int64ToIntS(vsapi->propGetInt(in, "tbsize", 0, &err));
         if (err)
