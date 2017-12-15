@@ -21,6 +21,9 @@
     <ClCompile Include="DFTTest_SSE2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="DFTTest_AVX2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="vectorclass\instrset_detect.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

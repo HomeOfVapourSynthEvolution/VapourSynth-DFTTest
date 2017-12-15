@@ -304,6 +304,7 @@ opt -
         0 - auto detect
         1 - use c
         2 - use sse2
+        3 - use avx2
 ```
 
 

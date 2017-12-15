@@ -35,10 +35,13 @@
 #include "vectorclass/vectorclass.h"
 
 template<int type> extern void filter_sse2(float *, const float *, const int, const float *, const float *, const float *) noexcept;
+template<int type> extern void filter_avx2(float *, const float *, const int, const float *, const float *, const float *) noexcept;
 
 template<typename T> extern void func_0_sse2(VSFrameRef *[3], VSFrameRef *, const DFTTestData *, const VSAPI *) noexcept;
+template<typename T> extern void func_0_avx2(VSFrameRef *[3], VSFrameRef *, const DFTTestData *, const VSAPI *) noexcept;
 
 template<typename T> extern void func_1_sse2(VSFrameRef *[15][3], VSFrameRef *, const int, const DFTTestData *, const VSAPI *) noexcept;
+template<typename T> extern void func_1_avx2(VSFrameRef *[15][3], VSFrameRef *, const int, const DFTTestData *, const VSAPI *) noexcept;
 #endif
 
 #define EXTRA(a,b) (((a) % (b)) ? ((b) - ((a) % (b))) : 0)
@@ -635,7 +638,35 @@ static void selectFunctions(const unsigned ftype, const unsigned opt, DFTTestDat
 #ifdef VS_TARGET_CPU_X86
     const int iset = instrset_detect();
 
-    if ((opt == 0 && iset >= 2) || opt == 2) {
+    if ((opt == 0 && iset >= 8) || opt == 3) {
+        if (ftype == 0) {
+            if (std::abs(d->f0beta - 1.f) < 0.00005f)
+                d->filterCoeffs = filter_avx2<0>;
+            else if (std::abs(d->f0beta - 0.5f) < 0.00005f)
+                d->filterCoeffs = filter_avx2<6>;
+            else
+                d->filterCoeffs = filter_avx2<5>;
+        } else if (ftype == 1) {
+            d->filterCoeffs = filter_avx2<1>;
+        } else if (ftype == 2) {
+            d->filterCoeffs = filter_avx2<2>;
+        } else if (ftype == 3) {
+            d->filterCoeffs = filter_avx2<3>;
+        } else {
+            d->filterCoeffs = filter_avx2<4>;
+        }
+
+        if (d->vi->format->bytesPerSample == 1) {
+            d->func_0 = func_0_avx2<uint8_t>;
+            d->func_1 = func_1_avx2<uint8_t>;
+        } else if (d->vi->format->bytesPerSample == 2) {
+            d->func_0 = func_0_avx2<uint16_t>;
+            d->func_1 = func_1_avx2<uint16_t>;
+        } else {
+            d->func_0 = func_0_avx2<float>;
+            d->func_1 = func_1_avx2<float>;
+        }
+    } else if ((opt == 0 && iset >= 2) || opt == 2) {
         if (ftype == 0) {
             if (std::abs(d->f0beta - 1.f) < 0.00005f)
                 d->filterCoeffs = filter_sse2<0>;
@@ -699,14 +730,14 @@ static const VSFrameRef *VS_CC dfttestGetFrame(int n, int activationReason, void
             }
 
             if (!d->dftc.count(threadId)) {
-                fftwf_complex * dftc = vs_aligned_malloc<fftwf_complex>((d->ccnt + 15) * sizeof(fftwf_complex), 32);
+                fftwf_complex * dftc = vs_aligned_malloc<fftwf_complex>((d->ccnt + 7) * sizeof(fftwf_complex), 32);
                 if (!dftc)
                     throw std::string{ "malloc failure (dftc)" };
                 d->dftc.emplace(threadId, dftc);
             }
 
             if (!d->dftc2.count(threadId)) {
-                fftwf_complex * dftc2 = vs_aligned_malloc<fftwf_complex>((d->ccnt + 15) * sizeof(fftwf_complex), 32);
+                fftwf_complex * dftc2 = vs_aligned_malloc<fftwf_complex>((d->ccnt + 7) * sizeof(fftwf_complex), 32);
                 if (!dftc2)
                     throw std::string{ "malloc failure (dftc2)" };
                 d->dftc2.emplace(threadId, dftc2);
@@ -957,8 +988,8 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
         if (d->twin < 0 || d->twin > 11)
             throw std::string{ "twin must be between 0 and 11 (inclusive)" };
 
-        if (opt < 0 || opt > 2)
-            throw std::string{ "opt must be 0, 1 or 2" };
+        if (opt < 0 || opt > 3)
+            throw std::string{ "opt must be 0, 1, 2 or 3" };
 
         const unsigned numThreads = vsapi->getCoreInfo(core)->numThreads;
         d->ebuff.reserve(numThreads);
@@ -1010,7 +1041,7 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
         createWindow(d->hw, tmode, smode, d.get());
 
         float * dftgr = vs_aligned_malloc<float>((d->bvolume + 7) * sizeof(float), 32);
-        d->dftgc = vs_aligned_malloc<fftwf_complex>((d->ccnt + 15) * sizeof(fftwf_complex), 32);
+        d->dftgc = vs_aligned_malloc<fftwf_complex>((d->ccnt + 7) * sizeof(fftwf_complex), 32);
         if (!dftgr || !d->dftgc)
             throw std::string{ "malloc failure (dftgr/dftgc)" };
 
@@ -1042,10 +1073,10 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
         wscale = 1.f / wscale;
         const float wscalef = (ftype < 2) ? wscale : 1.f;
 
-        d->sigmas = vs_aligned_malloc<float>((d->ccnt2 + 15) * sizeof(float), 32);
-        d->sigmas2 = vs_aligned_malloc<float>((d->ccnt2 + 15) * sizeof(float), 32);
-        d->pmins = vs_aligned_malloc<float>((d->ccnt2 + 15) * sizeof(float), 32);
-        d->pmaxs = vs_aligned_malloc<float>((d->ccnt2 + 15) * sizeof(float), 32);
+        d->sigmas = vs_aligned_malloc<float>((d->ccnt2 + 7) * sizeof(float), 32);
+        d->sigmas2 = vs_aligned_malloc<float>((d->ccnt2 + 7) * sizeof(float), 32);
+        d->pmins = vs_aligned_malloc<float>((d->ccnt2 + 7) * sizeof(float), 32);
+        d->pmaxs = vs_aligned_malloc<float>((d->ccnt2 + 7) * sizeof(float), 32);
         if (!d->sigmas || !d->sigmas2 || !d->pmins || !d->pmaxs)
             throw std::string{ "malloc failure (sigmas/sigmas2/pmins/pmaxs)" };
 
@@ -1127,7 +1158,7 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
             createWindow(hw2, 0, 0, d.get());
 
             float * VS_RESTRICT dftr = vs_aligned_malloc<float>((d->bvolume + 7) * sizeof(float), 32);
-            fftwf_complex * dftgc2 = vs_aligned_malloc<fftwf_complex>((d->ccnt + 15) * sizeof(fftwf_complex), 32);
+            fftwf_complex * dftgc2 = vs_aligned_malloc<fftwf_complex>((d->ccnt + 7) * sizeof(fftwf_complex), 32);
             if (!dftr || !dftgc2)
                 throw std::string{ "malloc failure (dftr/dftgc2)" };
 
@@ -1201,8 +1232,8 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
             }
 
             for (int ct = 0; ct < nnpoints; ct++) {
-                fftwf_complex * dftc = vs_aligned_malloc<fftwf_complex>((d->ccnt + 15) * sizeof(fftwf_complex), 32);
-                fftwf_complex * dftc2 = vs_aligned_malloc<fftwf_complex>((d->ccnt + 15) * sizeof(fftwf_complex), 32);
+                fftwf_complex * dftc = vs_aligned_malloc<fftwf_complex>((d->ccnt + 7) * sizeof(fftwf_complex), 32);
+                fftwf_complex * dftc2 = vs_aligned_malloc<fftwf_complex>((d->ccnt + 7) * sizeof(fftwf_complex), 32);
                 if (!dftc || !dftc2)
                     throw std::string{ "malloc failure (dftc/dftc2)" };
 

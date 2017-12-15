@@ -11,6 +11,8 @@ libdfttest_la_SOURCES = DFTTest/DFTTest.cpp \
                         DFTTest/vectorclass/instrset.h \
                         DFTTest/vectorclass/instrset_detect.cpp
 
+libdfttest_la_LIBADD = $(FFTW3F_LIBS)
+
 if VS_TARGET_CPU_X86
 libdfttest_la_SOURCES += DFTTest/DFTTest_SSE2.cpp \
                          DFTTest/vectorclass/vectorclass.h \
@@ -20,8 +22,13 @@ libdfttest_la_SOURCES += DFTTest/DFTTest_SSE2.cpp \
                          DFTTest/vectorclass/vectori128.h \
                          DFTTest/vectorclass/vectori256.h \
                          DFTTest/vectorclass/vectori256e.h
+
+noinst_LTLIBRARIES = libavx2.la
+
+libavx2_la_SOURCES = DFTTest/DFTTest_AVX2.cpp
+libavx2_la_CXXFLAGS = $(AM_CXXFLAGS) -mavx2 -mfma
+
+libdfttest_la_LIBADD += libavx2.la
 endif
 
 libdfttest_la_LDFLAGS = -no-undefined -avoid-version $(PLUGINLDFLAGS)
-
-libdfttest_la_LIBADD = $(FFTW3F_LIBS)

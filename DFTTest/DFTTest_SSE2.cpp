@@ -95,8 +95,8 @@ static inline void removeMean(float * _dftc, const float * _dftgc, const int ccn
 
     for (int h = 0; h < ccnt; h += 4) {
         const Vec4f dftgc = Vec4f().load_a(_dftgc + h);
-        const Vec4f dftc2 = gf * dftgc;
         const Vec4f dftc = Vec4f().load_a(_dftc + h);
+        const Vec4f dftc2 = gf * dftgc;
         dftc2.store_a(_dftc2 + h);
         (dftc - dftc2).store_a(_dftc + h);
     }
@@ -179,14 +179,6 @@ void filter_sse2<3>(float * dftc, const float * _sigmas, const int ccnt, const f
         Vec4f imag = blend4f<1, 3, 5, 7>(dftcLow, dftcHigh);
         const Vec4f psd = mul_add(real, real, imag * imag);
 
-        const Vec4f pminLow = Vec4f().load_a(_pmin + h);
-        const Vec4f pminHigh = Vec4f().load_a(_pmin + h + 4);
-        const Vec4f pmin = blend4f<0, 2, 4, 6>(pminLow, pminHigh);
-
-        const Vec4f pmaxLow = Vec4f().load_a(_pmax + h);
-        const Vec4f pmaxHigh = Vec4f().load_a(_pmax + h + 4);
-        const Vec4f pmax = blend4f<0, 2, 4, 6>(pmaxLow, pmaxHigh);
-
         const Vec4f sigmasLow = Vec4f().load_a(_sigmas + h);
         const Vec4f sigmasHigh = Vec4f().load_a(_sigmas + h + 4);
         const Vec4f sigmas = blend4f<0, 2, 4, 6>(sigmasLow, sigmasHigh);
@@ -194,6 +186,14 @@ void filter_sse2<3>(float * dftc, const float * _sigmas, const int ccnt, const f
         const Vec4f sigmas2Low = Vec4f().load_a(_sigmas2 + h);
         const Vec4f sigmas2High = Vec4f().load_a(_sigmas2 + h + 4);
         const Vec4f sigmas2 = blend4f<0, 2, 4, 6>(sigmas2Low, sigmas2High);
+
+        const Vec4f pminLow = Vec4f().load_a(_pmin + h);
+        const Vec4f pminHigh = Vec4f().load_a(_pmin + h + 4);
+        const Vec4f pmin = blend4f<0, 2, 4, 6>(pminLow, pminHigh);
+
+        const Vec4f pmaxLow = Vec4f().load_a(_pmax + h);
+        const Vec4f pmaxHigh = Vec4f().load_a(_pmax + h + 4);
+        const Vec4f pmax = blend4f<0, 2, 4, 6>(pmaxLow, pmaxHigh);
 
         const Vec4fb flag = (psd >= pmin && psd <= pmax);
         real = select(flag, real * sigmas, real * sigmas2);
@@ -215,6 +215,10 @@ void filter_sse2<4>(float * dftc, const float * _sigmas, const int ccnt, const f
         Vec4f imag = blend4f<1, 3, 5, 7>(dftcLow, dftcHigh);
         const Vec4f psd = mul_add(real, real, imag * imag) + 1e-15f;
 
+        const Vec4f sigmasLow = Vec4f().load_a(_sigmas + h);
+        const Vec4f sigmasHigh = Vec4f().load_a(_sigmas + h + 4);
+        const Vec4f sigmas = blend4f<0, 2, 4, 6>(sigmasLow, sigmasHigh);
+
         const Vec4f pminLow = Vec4f().load_a(_pmin + h);
         const Vec4f pminHigh = Vec4f().load_a(_pmin + h + 4);
         const Vec4f pmin = blend4f<0, 2, 4, 6>(pminLow, pminHigh);
@@ -222,10 +226,6 @@ void filter_sse2<4>(float * dftc, const float * _sigmas, const int ccnt, const f
         const Vec4f pmaxLow = Vec4f().load_a(_pmax + h);
         const Vec4f pmaxHigh = Vec4f().load_a(_pmax + h + 4);
         const Vec4f pmax = blend4f<0, 2, 4, 6>(pmaxLow, pmaxHigh);
-
-        const Vec4f sigmasLow = Vec4f().load_a(_sigmas + h);
-        const Vec4f sigmasHigh = Vec4f().load_a(_sigmas + h + 4);
-        const Vec4f sigmas = blend4f<0, 2, 4, 6>(sigmasLow, sigmasHigh);
 
         const Vec4f mult = sigmas * sqrt(psd * pmax / ((psd + pmin) * (psd + pmax)));
         real *= mult;
