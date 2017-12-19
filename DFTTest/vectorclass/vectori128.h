@@ -2024,10 +2024,10 @@ public:
     // Member function to load 4 8-bit unsigned integers from array
     Vec4i & load_4uc(void const * p) {
 #if INSTRSET >= 5   // SSE4.1
-        xmm          = _mm_cvtepu8_epi32(_mm_cvtsi32_si128(*(int const*)p));
+        xmm          = _mm_cvtepu8_epi32(_mm_cvtsi32_si128(*(int32_t const*)p));
 #else
         __m128i zero = _mm_setzero_si128();
-        xmm          = _mm_unpacklo_epi16(_mm_unpacklo_epi8(Vec16uc().loadl(p),zero),zero);
+        xmm          = _mm_unpacklo_epi16(_mm_unpacklo_epi8(_mm_cvtsi32_si128(*(int32_t const*)p),zero),zero);
 #endif
         return *this;
     }
