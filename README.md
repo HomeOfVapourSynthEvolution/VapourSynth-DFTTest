@@ -314,6 +314,13 @@ Compilation
 Requires `fftw3f`.
 
 ```
+meson build
+ninja -C build
+```
+
+or
+
+```
 ./autogen.sh
 ./configure
 make

@@ -21,7 +21,9 @@ libdfttest_la_SOURCES += DFTTest/DFTTest_SSE2.cpp \
                          DFTTest/vectorclass/vectorf256e.h \
                          DFTTest/vectorclass/vectori128.h \
                          DFTTest/vectorclass/vectori256.h \
-                         DFTTest/vectorclass/vectori256e.h
+                         DFTTest/vectorclass/vectori256e.h \
+                         DFTTest/vectorclass/vectormath_common.h \
+                         DFTTest/vectorclass/vectormath_exp.h
 
 noinst_LTLIBRARIES = libavx2.la
 
