@@ -23,9 +23,10 @@
 */
 
 #define _USE_MATH_DEFINES
-#include <algorithm>
 #include <cmath>
 #include <cstdio>
+
+#include <algorithm>
 #include <memory>
 #include <string>
 
@@ -37,11 +38,11 @@
 template<int type> extern void filter_sse2(float *, const float *, const int, const float *, const float *, const float *) noexcept;
 template<int type> extern void filter_avx2(float *, const float *, const int, const float *, const float *, const float *) noexcept;
 
-template<typename T> extern void func_0_sse2(VSFrameRef *[3], VSFrameRef *, const DFTTestData *, const VSAPI *) noexcept;
-template<typename T> extern void func_0_avx2(VSFrameRef *[3], VSFrameRef *, const DFTTestData *, const VSAPI *) noexcept;
+template<typename T> extern void func_0_sse2(VSFrameRef * [3], VSFrameRef *, const DFTTestData *, const VSAPI *) noexcept;
+template<typename T> extern void func_0_avx2(VSFrameRef * [3], VSFrameRef *, const DFTTestData *, const VSAPI *) noexcept;
 
-template<typename T> extern void func_1_sse2(VSFrameRef *[15][3], VSFrameRef *, const int, const DFTTestData *, const VSAPI *) noexcept;
-template<typename T> extern void func_1_avx2(VSFrameRef *[15][3], VSFrameRef *, const int, const DFTTestData *, const VSAPI *) noexcept;
+template<typename T> extern void func_1_sse2(VSFrameRef * [15][3], VSFrameRef *, const int, const DFTTestData *, const VSAPI *) noexcept;
+template<typename T> extern void func_1_avx2(VSFrameRef * [15][3], VSFrameRef *, const int, const DFTTestData *, const VSAPI *) noexcept;
 #endif
 
 #define EXTRA(a,b) (((a) % (b)) ? ((b) - ((a) % (b))) : 0)
@@ -151,8 +152,8 @@ static float * parseString(const char * s, int & poscnt, const float sigma, cons
 
     if (s[0] == 0) {
         parray = new float[4];
-        parray[0] = 0.f;
-        parray[2] = 1.f;
+        parray[0] = 0.0f;
+        parray[2] = 1.0f;
         parray[1] = parray[3] = std::pow(sigma, pfact);
         poscnt = 2;
     } else {
@@ -166,12 +167,12 @@ static float * parseString(const char * s, int & poscnt, const float sigma, cons
             if (std::sscanf(sT, "%f:%f", &pos, &sval) != 2)
                 throw std::string{ "invalid entry in sigma string" };
 
-            if (pos < 0.f || pos > 1.f)
+            if (pos < 0.0f || pos > 1.0f)
                 throw std::string{ "sigma string - invalid pos (" } + std::to_string(pos) + ")";
 
-            if (pos == 0.f)
+            if (pos == 0.0f)
                 found[0] = true;
-            else if (pos == 1.f)
+            else if (pos == 1.0f)
                 found[1] = true;
 
             poscnt++;
@@ -238,19 +239,19 @@ static float interp(const float pf, const float * pv, const int cnt) noexcept {
     const float d0 = pf - pv[lidx * 2];
     const float d1 = pv[hidx * 2] - pf;
 
-    if (hidx == lidx || d0 <= 0.f)
+    if (hidx == lidx || d0 <= 0.0f)
         return pv[lidx * 2 + 1];
-    if (d1 <= 0.f)
+    if (d1 <= 0.0f)
         return pv[hidx * 2 + 1];
 
     const float tf = d0 / (d0 + d1);
-    return pv[lidx * 2 + 1] * (1.f - tf) + pv[hidx * 2 + 1] * tf;
+    return pv[lidx * 2 + 1] * (1.0f - tf) + pv[hidx * 2 + 1] * tf;
 }
 
 static float getSVal(const int pos, const int len, const float * pv, const int cnt, float & pf) noexcept {
     if (len == 1) {
-        pf = 0.f;
-        return 1.f;
+        pf = 0.0f;
+        return 1.0f;
     }
 
     const int ld2 = len / 2;
@@ -339,7 +340,7 @@ template<>
 inline void proc0(const float * s0, const float * s1, float * VS_RESTRICT d, const int p0, const int p1, const float divisor) noexcept {
     for (int u = 0; u < p1; u++) {
         for (int v = 0; v < p1; v++)
-            d[v] = s0[v] * 255.f * s1[v];
+            d[v] = s0[v] * 255.0f * s1[v];
 
         s0 += p0;
         s1 += p1;
@@ -383,7 +384,7 @@ template<>
 inline void filter_c<0>(float * VS_RESTRICT dftc, const float * sigmas, const int ccnt, const float * pmin, const float * pmax, const float * sigmas2) noexcept {
     for (int h = 0; h < ccnt; h += 2) {
         const float psd = dftc[h] * dftc[h] + dftc[h + 1] * dftc[h + 1];
-        const float mult = std::max((psd - sigmas[h]) / (psd + 1e-15f), 0.f);
+        const float mult = std::max((psd - sigmas[h]) / (psd + 1e-15f), 0.0f);
         dftc[h] *= mult;
         dftc[h + 1] *= mult;
     }
@@ -394,7 +395,7 @@ inline void filter_c<1>(float * VS_RESTRICT dftc, const float * sigmas, const in
     for (int h = 0; h < ccnt; h += 2) {
         const float psd = dftc[h] * dftc[h] + dftc[h + 1] * dftc[h + 1];
         if (psd < sigmas[h])
-            dftc[h] = dftc[h + 1] = 0.f;
+            dftc[h] = dftc[h + 1] = 0.0f;
     }
 }
 
@@ -437,7 +438,7 @@ inline void filter_c<5>(float * VS_RESTRICT dftc, const float * sigmas, const in
 
     for (int h = 0; h < ccnt; h += 2) {
         const float psd = dftc[h] * dftc[h] + dftc[h + 1] * dftc[h + 1];
-        const float mult = std::pow(std::max((psd - sigmas[h]) / (psd + 1e-15f), 0.f), beta);
+        const float mult = std::pow(std::max((psd - sigmas[h]) / (psd + 1e-15f), 0.0f), beta);
         dftc[h] *= mult;
         dftc[h + 1] *= mult;
     }
@@ -447,7 +448,7 @@ template<>
 inline void filter_c<6>(float * VS_RESTRICT dftc, const float * sigmas, const int ccnt, const float * pmin, const float * pmax, const float * sigmas2) noexcept {
     for (int h = 0; h < ccnt; h += 2) {
         const float psd = dftc[h] * dftc[h] + dftc[h + 1] * dftc[h + 1];
-        const float mult = std::sqrt(std::max((psd - sigmas[h]) / (psd + 1e-15f), 0.f));
+        const float mult = std::sqrt(std::max((psd - sigmas[h]) / (psd + 1e-15f), 0.0f));
         dftc[h] *= mult;
         dftc[h + 1] *= mult;
     }
@@ -486,7 +487,7 @@ void cast(const float * ebp, float * VS_RESTRICT dstp, const int dstWidth, const
           const float multiplier, const int peak) noexcept {
     for (int y = 0; y < dstHeight; y++) {
         for (int x = 0; x < dstWidth; x++)
-            dstp[x] = ebp[x] * (1.f / 255.f);
+            dstp[x] = ebp[x] * (1.0f / 255.0f);
 
         ebp += ebpStride;
         dstp += dstStride;
@@ -605,7 +606,7 @@ static void func_1_c(VSFrameRef * src[15][3], VSFrameRef * dst, const int pos, c
 
 static void selectFunctions(const unsigned ftype, const unsigned opt, DFTTestData * d) noexcept {
     if (ftype == 0) {
-        if (std::abs(d->f0beta - 1.f) < 0.00005f)
+        if (std::abs(d->f0beta - 1.0f) < 0.00005f)
             d->filterCoeffs = filter_c<0>;
         else if (std::abs(d->f0beta - 0.5f) < 0.00005f)
             d->filterCoeffs = filter_c<6>;
@@ -640,7 +641,7 @@ static void selectFunctions(const unsigned ftype, const unsigned opt, DFTTestDat
 
     if ((opt == 0 && iset >= 8) || opt == 3) {
         if (ftype == 0) {
-            if (std::abs(d->f0beta - 1.f) < 0.00005f)
+            if (std::abs(d->f0beta - 1.0f) < 0.00005f)
                 d->filterCoeffs = filter_avx2<0>;
             else if (std::abs(d->f0beta - 0.5f) < 0.00005f)
                 d->filterCoeffs = filter_avx2<6>;
@@ -668,7 +669,7 @@ static void selectFunctions(const unsigned ftype, const unsigned opt, DFTTestDat
         }
     } else if ((opt == 0 && iset >= 2) || opt == 2) {
         if (ftype == 0) {
-            if (std::abs(d->f0beta - 1.f) < 0.00005f)
+            if (std::abs(d->f0beta - 1.0f) < 0.00005f)
                 d->filterCoeffs = filter_sse2<0>;
             else if (std::abs(d->f0beta - 0.5f) < 0.00005f)
                 d->filterCoeffs = filter_sse2<6>;
@@ -698,12 +699,12 @@ static void selectFunctions(const unsigned ftype, const unsigned opt, DFTTestDat
 #endif
 }
 
-static void VS_CC dfttestInit(VSMap *in, VSMap *out, void **instanceData, VSNode *node, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC dfttestInit(VSMap * in, VSMap * out, void ** instanceData, VSNode * node, VSCore * core, const VSAPI * vsapi) {
     DFTTestData * d = static_cast<DFTTestData *>(*instanceData);
     vsapi->setVideoInfo(d->vi, 1, node);
 }
 
-static const VSFrameRef *VS_CC dfttestGetFrame(int n, int activationReason, void **instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+static const VSFrameRef * VS_CC dfttestGetFrame(int n, int activationReason, void ** instanceData, void ** frameData, VSFrameContext * frameCtx, VSCore * core, const VSAPI * vsapi) {
     DFTTestData * d = static_cast<DFTTestData *>(*instanceData);
 
     if (activationReason == arInitial) {
@@ -719,24 +720,19 @@ static const VSFrameRef *VS_CC dfttestGetFrame(int n, int activationReason, void
         try {
             auto threadId = std::this_thread::get_id();
 
-            if (!d->ebuff.count(threadId))
+            if (!d->ebuff.count(threadId)) {
                 d->ebuff.emplace(threadId, vsapi->newVideoFrame(vsapi->registerFormat(cmGray, stFloat, 32, 0, 0, core), d->padWidth[0], d->padHeight[0], nullptr, core));
 
-            if (!d->dftr.count(threadId)) {
                 float * dftr = vs_aligned_malloc<float>((d->bvolume + 7) * sizeof(float), 32);
                 if (!dftr)
                     throw std::string{ "malloc failure (dftr)" };
                 d->dftr.emplace(threadId, dftr);
-            }
 
-            if (!d->dftc.count(threadId)) {
                 fftwf_complex * dftc = vs_aligned_malloc<fftwf_complex>((d->ccnt + 7) * sizeof(fftwf_complex), 32);
                 if (!dftc)
                     throw std::string{ "malloc failure (dftc)" };
                 d->dftc.emplace(threadId, dftc);
-            }
 
-            if (!d->dftc2.count(threadId)) {
                 fftwf_complex * dftc2 = vs_aligned_malloc<fftwf_complex>((d->ccnt + 7) * sizeof(fftwf_complex), 32);
                 if (!dftc2)
                     throw std::string{ "malloc failure (dftc2)" };
@@ -801,7 +797,7 @@ static const VSFrameRef *VS_CC dfttestGetFrame(int n, int activationReason, void
     return nullptr;
 }
 
-static void VS_CC dfttestFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
+static void VS_CC dfttestFree(void * instanceData, VSCore * core, const VSAPI * vsapi) {
     DFTTestData * d = static_cast<DFTTestData *>(instanceData);
 
     vsapi->freeNode(d->node);
@@ -831,15 +827,16 @@ static void VS_CC dfttestFree(void *instanceData, VSCore *core, const VSAPI *vsa
     delete d;
 }
 
-static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
-    std::unique_ptr<DFTTestData> d{ new DFTTestData{} };
+static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, VSCore * core, const VSAPI * vsapi) {
+    std::unique_ptr<DFTTestData> d = std::make_unique<DFTTestData>();
     int err;
 
     d->node = vsapi->propGetNode(in, "clip", 0, nullptr);
     d->vi = vsapi->getVideoInfo(d->node);
 
     try {
-        if (!isConstantFormat(d->vi) || (d->vi->format->sampleType == stInteger && d->vi->format->bitsPerSample > 16) ||
+        if (!isConstantFormat(d->vi) ||
+            (d->vi->format->sampleType == stInteger && d->vi->format->bitsPerSample > 16) ||
             (d->vi->format->sampleType == stFloat && d->vi->format->bitsPerSample != 32))
             throw std::string{ "only constant format 8-16 bit integer and 32 bit float input supported" };
 
@@ -847,17 +844,17 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
         float sigma = static_cast<float>(vsapi->propGetFloat(in, "sigma", 0, &err));
         if (err)
-            sigma = 8.f;
+            sigma = 8.0f;
 
         float sigma2 = static_cast<float>(vsapi->propGetFloat(in, "sigma2", 0, &err));
         if (err)
-            sigma2 = 8.f;
+            sigma2 = 8.0f;
 
         const float pmin = static_cast<float>(vsapi->propGetFloat(in, "pmin", 0, &err));
 
         float pmax = static_cast<float>(vsapi->propGetFloat(in, "pmax", 0, &err));
         if (err)
-            pmax = 500.f;
+            pmax = 500.0f;
 
         d->sbsize = int64ToIntS(vsapi->propGetInt(in, "sbsize", 0, &err));
         if (err)
@@ -899,7 +896,7 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
         d->f0beta = static_cast<float>(vsapi->propGetFloat(in, "f0beta", 0, &err));
         if (err)
-            d->f0beta = 1.f;
+            d->f0beta = 1.0f;
 
         const char * nstring = vsapi->propGetData(in, "nstring", 0, &err);
         if (err)
@@ -1001,12 +998,12 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
 
         if (d->vi->format->sampleType == stInteger) {
             d->multiplier = static_cast<float>(1 << (d->vi->format->bitsPerSample - 8));
-            d->divisor = 1.f / d->multiplier;
+            d->divisor = 1.0f / d->multiplier;
             d->peak = (1 << d->vi->format->bitsPerSample) - 1;
         }
 
         if (ftype != 0)
-            d->f0beta = 1.f;
+            d->f0beta = 1.0f;
 
         d->barea = d->sbsize * d->sbsize;
         d->bvolume = d->barea * d->tbsize;
@@ -1014,7 +1011,7 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
         d->ccnt2 = d->ccnt * 2;
         d->type = tmode * 4 + (d->tbsize > 1 ? 2 : 0) + smode;
         d->sbd1 = d->sbsize / 2;
-        d->uf0b = (std::abs(d->f0beta - 1.f) < 0.00005f) ? false : true;
+        d->uf0b = (std::abs(d->f0beta - 1.0f) < 0.00005f) ? false : true;
         d->inc = (d->type & 1) ? d->sbsize - d->sosize : 1;
 
         d->padFormat = vsapi->registerFormat(cmGray, d->vi->format->sampleType, d->vi->format->bitsPerSample, 0, 0, core);
@@ -1053,14 +1050,14 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
             d->fti = fftwf_plan_dft_c2r_2d(d->sbsize, d->sbsize, d->dftgc, dftgr, FFTW_PATIENT | FFTW_DESTROY_INPUT);
         }
 
-        float wscale = 0.f;
+        float wscale = 0.0f;
 
         const float * hwT = d->hw;
         float * VS_RESTRICT dftgrT = dftgr;
         for (int s = 0; s < d->tbsize; s++) {
             for (int i = 0; i < d->sbsize; i++) {
                 for (int k = 0; k < d->sbsize; k++) {
-                    dftgrT[k] = 255.f * hwT[k];
+                    dftgrT[k] = 255.0f * hwT[k];
                     wscale += hwT[k] * hwT[k];
                 }
                 hwT += d->sbsize;
@@ -1070,8 +1067,8 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
         fftwf_execute_dft_r2c(d->ft, dftgr, d->dftgc);
         vs_aligned_free(dftgr);
 
-        wscale = 1.f / wscale;
-        const float wscalef = (ftype < 2) ? wscale : 1.f;
+        wscale = 1.0f / wscale;
+        const float wscalef = (ftype < 2) ? wscale : 1.0f;
 
         d->sigmas = vs_aligned_malloc<float>((d->ccnt2 + 7) * sizeof(float), 32);
         d->sigmas2 = vs_aligned_malloc<float>((d->ccnt2 + 7) * sizeof(float), 32);
@@ -1087,7 +1084,7 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
             if (d->sbsize == 1)
                 ndim -= 2;
 
-            const float ndiv = 1.f / ndim;
+            const float ndiv = 1.0f / ndim;
             int tcnt = 0, sycnt = 0, sxcnt = 0;
             float * tdata, * sydata, * sxdata;
             bool edis = false;
@@ -1100,9 +1097,9 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
                         w++;
                 }
 
-                tdata = parseString(w, tcnt, sigma, edis ? 1.f : ndiv);
-                sydata = parseString(w, sycnt, sigma, edis ? 1.f : ndiv);
-                sxdata = parseString(w, sxcnt, sigma, edis ? 1.f : ndiv);
+                tdata = parseString(w, tcnt, sigma, edis ? 1.0f : ndiv);
+                sydata = parseString(w, sycnt, sigma, edis ? 1.0f : ndiv);
+                sxdata = parseString(w, sxcnt, sigma, edis ? 1.0f : ndiv);
             } else {
                 tdata = parseString(sst, tcnt, sigma, ndiv);
                 sydata = parseString(ssy, sycnt, sigma, ndiv);
@@ -1162,20 +1159,20 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
             if (!dftr || !dftgc2)
                 throw std::string{ "malloc failure (dftr/dftgc2)" };
 
-            float wscale2 = 0.f;
+            float wscale2 = 0.0f;
             int w = 0;
             for (int s = 0; s < d->tbsize; s++) {
                 for (int i = 0; i < d->sbsize; i++) {
                     for (int k = 0; k < d->sbsize; k++, w++) {
-                        dftr[w] = 255.f * hw2[w];
+                        dftr[w] = 255.0f * hw2[w];
                         wscale2 += hw2[w] * hw2[w];
                     }
                 }
             }
-            wscale2 = 1.f / wscale2;
+            wscale2 = 1.0f / wscale2;
             fftwf_execute_dft_r2c(d->ft, dftr, dftgc2);
 
-            float alpha = (ftype == 0) ? 5.f : 7.f;
+            float alpha = (ftype == 0) ? 5.0f : 7.0f;
             int nnpoints = 0;
             NPInfo * npts = new NPInfo[500];
             const char * q = nstring;
@@ -1186,7 +1183,7 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
                 if (std::sscanf(q, "%*c:%f", &alphat) != 1)
                     throw std::string{ "error reading alpha value from nstring" };
 
-                if (alphat <= 0.f)
+                if (alphat <= 0.0f)
                     throw std::string{ "nstring - invalid alpha factor" };
 
                 alpha = alphat;
@@ -1276,7 +1273,7 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
             delete[] npts;
 
             if (nnpoints != 0) {
-                const float scale = 1.f / nnpoints;
+                const float scale = 1.0f / nnpoints;
                 for (int h = 0; h < d->ccnt2; h++)
                     d->sigmas[h] *= scale * (wscale2 / wscale) * alpha;
             } else {
@@ -1295,7 +1292,7 @@ static void VS_CC dfttestCreate(const VSMap *in, VSMap *out, void *userData, VSC
 //////////////////////////////////////////
 // Init
 
-VS_EXTERNAL_API(void) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegisterFunction registerFunc, VSPlugin *plugin) {
+VS_EXTERNAL_API(void) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegisterFunction registerFunc, VSPlugin * plugin) {
     configFunc("com.holywu.dfttest", "dfttest", "2D/3D frequency domain denoiser", VAPOURSYNTH_API_VERSION, 1, plugin);
     registerFunc("DFTTest",
                  "clip:clip;"

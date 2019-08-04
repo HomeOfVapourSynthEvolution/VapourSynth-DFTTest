@@ -1061,6 +1061,11 @@ static inline Vec32uc min(Vec32uc const & a, Vec32uc const & b) {
     return _mm256_min_epu8(a,b);
 }
 
+// function avg: (a + b + 1) >> 1
+static inline Vec32uc avg(Vec32uc const & a, Vec32uc const & b) {
+    return _mm256_avg_epu8(a,b);
+}
+
 
     
 /*****************************************************************************
@@ -1791,6 +1796,11 @@ static inline Vec16us max(Vec16us const & a, Vec16us const & b) {
 // function min: a < b ? a : b
 static inline Vec16us min(Vec16us const & a, Vec16us const & b) {
     return _mm256_min_epu16(a,b);
+}
+
+// function avg: (a + b + 1) >> 1
+static inline Vec16us avg(Vec16us const & a, Vec16us const & b) {
+    return _mm256_avg_epu16(a,b);
 }
 
 

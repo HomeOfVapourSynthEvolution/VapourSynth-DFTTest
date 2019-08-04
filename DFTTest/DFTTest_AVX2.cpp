@@ -46,7 +46,7 @@ inline void proc0(const float * _s0, const float * _s1, float * d, const int p0,
         for (int v = 0; v < p1; v += 8) {
             const Vec8f s0 = Vec8f().load(_s0 + v);
             const Vec8f s1 = Vec8f().load(_s1 + v);
-            (s0 * 255.f * s1).store(d + v);
+            (s0 * 255.0f * s1).store(d + v);
         }
 
         _s0 += p0;
@@ -241,7 +241,7 @@ void cast(const float * ebp, float * dstp, const int dstWidth, const int dstHeig
     for (int y = 0; y < dstHeight; y++) {
         for (int x = 0; x < dstWidth; x += 8) {
             const Vec8f srcp = Vec8f().load(ebp + x);
-            (srcp * (1.f / 255.f)).stream(dstp + x);
+            (srcp * (1.0f / 255.0f)).stream(dstp + x);
         }
 
         ebp += ebpStride;

@@ -11,7 +11,7 @@ Ported from AviSynth plugin http://bengal.missouri.edu/~kes25c/
 Usage
 =====
 
-    dfttest.DFTTest(clip clip[, int ftype=0, float sigma=8.0, float sigma2=8.0, float pmin=0.0, float pmax=500.0, int sbsize=16, int smode=1, int sosize=12, int tbsize=3, int tmode=0, int tosize=0, int swin=0, int twin=7, float sbeta=2.5, float tbeta=2.5, bint zmean=True, float f0beta=1.0, string nstring='', string sstring='', string ssx='', string ssy='', string sst='', int[] planes, int opt=0])
+    dfttest.DFTTest(clip clip[, int ftype=0, float sigma=8.0, float sigma2=8.0, float pmin=0.0, float pmax=500.0, int sbsize=16, int smode=1, int sosize=12, int tbsize=3, int tmode=0, int tosize=0, int swin=0, int twin=7, float sbeta=2.5, float tbeta=2.5, bint zmean=True, float f0beta=1.0, string nstring='', string sstring='', string ssx='', string ssy='', string sst='', int[] planes=[0, 1, 2], int opt=0])
 
 ```
 clip -
@@ -238,8 +238,8 @@ sstring/ssx/ssy/sst -
         sstring = "0.0:0.0 0.15:10.0 0.85:10.0 1.0:0.0"
 
     There are two methods for computing sigma values for a given frequency bin based on
-    sstring. The first computes the normalized frequency location of each dimension 
-    (horizontal,vertical,temporal), interpolates sigma for each of those dimensions, 
+    sstring. The first computes the normalized frequency location of each dimension
+    (horizontal,vertical,temporal), interpolates sigma for each of those dimensions,
     and then multiples the individual sigmas to obtain the final sigma value. So that
     everything scales correctly, all sigma values entered in sstring are first raised to
     the 1/#_dimensions power before performing linear interpolation and multiplying.
@@ -257,13 +257,13 @@ sstring/ssx/ssy/sst -
 
     ---------------- ssx/ssy/sst explanation -------------------------------
 
-    sstring breaks the 1D (sbsize=1), 2D (for tbsize=1), or 3D (for sbsize>1 and tbsize>1) 
+    sstring breaks the 1D (sbsize=1), 2D (for tbsize=1), or 3D (for sbsize>1 and tbsize>1)
     frequency spectrum into chunks by normalizing each dimension to [0.0,1.0]... i.e. the
     frequency range [0.0,0.25] is a cube covering the first 1/4 of each dimension. This works
     fine if you want to treat all dimensions the same in terms of how sigma should vary.
     However, if you wanted to ramp sigma based only on temporal frequency or horizontal
     frequency, this is too limited. This is where ssx/ssy/sst come in!
-       
+
     ssx/ssy/sst allow you to specify sigma as a function of horizontal (ssx), vertical (ssy),
     and temporal (sst) frequency only. The syntax is exactly the same as that of sstring. To
     get the final sigma value for a frequency location, the three separate values (one for
@@ -294,7 +294,7 @@ sstring/ssx/ssy/sst -
 
 planes -
 
-    A list of the planes to process. By default all planes are processed.
+    Sets which planes will be processed. Any unprocessed planes will be simply copied.
 
 
 opt -

@@ -1113,6 +1113,11 @@ static inline Vec16uc min(Vec16uc const & a, Vec16uc const & b) {
     return _mm_min_epu8(a,b);
 }
 
+// function avg: (a + b + 1) >> 1
+static inline Vec16uc avg(Vec16uc const & a, Vec16uc const & b) {
+    return _mm_avg_epu8(a,b);
+}
+
 
     
 /*****************************************************************************
@@ -1975,6 +1980,11 @@ static inline Vec8us min(Vec8us const & a, Vec8us const & b) {
     __m128i m1      = _mm_min_epi16(a1,b1);                // signed min
     return  _mm_xor_si128(m1,signbit);                     // sub 0x8000
 #endif
+}
+
+// function avg: (a + b + 1) >> 1
+static inline Vec8us avg(Vec8us const & a, Vec8us const & b) {
+    return _mm_avg_epu16(a,b);
 }
 
 
@@ -5355,10 +5365,11 @@ static inline Vec8us compress_saturated_s2u (Vec4i const & low, Vec4i const & hi
 #if INSTRSET >= 5   // SSE4.1 supported
     return  _mm_packus_epi32(low,high);                    // this instruction saturates from signed 32 bit to unsigned 16 bit
 #else
-    __m128i signbit = _mm_set1_epi32(0x8000);
-    __m128i low1    = _mm_sub_epi32(low,signbit);
-    __m128i high1   = _mm_sub_epi32(high,signbit);
-    return  _mm_xor_si128(_mm_packs_epi32(low1,high1),_mm_set1_epi16(-0x8000));
+    __m128i val_32 = _mm_set1_epi32(0x8000);
+    __m128i val_16 = _mm_set1_epi16(0x8000);
+    __m128i low1   = _mm_sub_epi32(low,val_32);
+    __m128i high1  = _mm_sub_epi32(high,val_32);
+    return  _mm_add_epi16(_mm_packs_epi32(low1,high1),val_16);
 #endif
 }
 
