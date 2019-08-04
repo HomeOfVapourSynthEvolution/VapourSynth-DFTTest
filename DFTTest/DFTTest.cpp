@@ -23,6 +23,7 @@
 */
 
 #define _USE_MATH_DEFINES
+#include <clocale>
 #include <cmath>
 #include <cstdio>
 
@@ -1078,6 +1079,8 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
             throw std::string{ "malloc failure (sigmas/sigmas2/pmins/pmaxs)" };
 
         if (sstring[0] || ssx[0] || ssy[0] || sst[0]) {
+            std::setlocale(LC_ALL, "C");
+
             int ndim = 3;
             if (d->tbsize == 1)
                 ndim -= 1;
@@ -1135,6 +1138,8 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
             delete[] tdata;
             delete[] sydata;
             delete[] sxdata;
+
+            std::setlocale(LC_ALL, "");
         } else {
             for (int i = 0; i < d->ccnt2; i++)
                 d->sigmas[i] = sigma / wscalef;
@@ -1147,6 +1152,7 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
         }
 
         if (nstring[0] && ftype < 2) {
+            std::setlocale(LC_ALL, "C");
             memset(d->sigmas, 0, d->ccnt2 * sizeof(float));
 
             float * VS_RESTRICT hw2 = vs_aligned_malloc<float>((d->bvolume + 7) * sizeof(float), 32);
@@ -1279,6 +1285,8 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
             } else {
                 throw std::string{ "no noise blocks in nstring" };
             }
+
+            std::setlocale(LC_ALL, "");
         }
     } catch (const std::string & error) {
         vsapi->setError(out, ("DFTTest: " + error).c_str());
