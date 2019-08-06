@@ -147,28 +147,25 @@ static void createWindow(float * VS_RESTRICT hw, const int tmode, const int smod
     delete[] sw;
 }
 
-static float * parseString(const char * s, int & poscnt, const float sigma, const float pfact) {
+static float * parseSigmaLocation(const double * s, const int num, int & poscnt, const float sigma, const float pfact) {
     float * parray = nullptr;
 
-    if (s[0] == 0) {
+    if (!s) {
         parray = new float[4];
         parray[0] = 0.0f;
         parray[2] = 1.0f;
         parray[1] = parray[3] = std::pow(sigma, pfact);
         poscnt = 2;
     } else {
-        poscnt = 0;
+        const double * sT = s;
         bool found[2] = { false, false };
-        const char * sT = s;
+        poscnt = 0;
 
-        while (sT[0] != 0) {
-            float pos, sval;
-
-            if (std::sscanf(sT, "%f:%f", &pos, &sval) != 2)
-                throw std::string{ "invalid entry in sigma string" };
+        for (int i = 0; i < num; i += 2) {
+            const float pos = static_cast<float>(sT[i]);
 
             if (pos < 0.0f || pos > 1.0f)
-                throw std::string{ "sigma string - invalid pos (" } + std::to_string(pos) + ")";
+                throw std::string{ "sigma location - invalid pos (" } + std::to_string(pos) + ")";
 
             if (pos == 0.0f)
                 found[0] = true;
@@ -176,42 +173,34 @@ static float * parseString(const char * s, int & poscnt, const float sigma, cons
                 found[1] = true;
 
             poscnt++;
-
-            while (sT[1] != 0 && sT[1] != ' ')
-                sT++;
-            sT++;
         }
 
         if (!found[0] || !found[1])
-            throw std::string{ "sigma string - one or more end points not provided" };
+            throw std::string{ "sigma location - one or more end points not provided" };
 
         parray = new float[poscnt * 2];
         sT = s;
         poscnt = 0;
 
-        while (sT[0] != 0) {
-            std::sscanf(sT, "%f:%f", &parray[poscnt * 2], &parray[poscnt * 2 + 1]);
-            parray[poscnt * 2 + 1] = std::pow(parray[poscnt * 2 + 1], pfact);
+        for (int i = 0; i < num; i += 2) {
+            parray[poscnt * 2 + 0] = static_cast<float>(sT[i + 0]);
+            parray[poscnt * 2 + 1] = std::pow(static_cast<float>(sT[i + 1]), pfact);
 
             poscnt++;
-
-            while (sT[1] != 0 && sT[1] != ' ')
-                sT++;
-            sT++;
         }
 
         for (int i = 1; i < poscnt; i++) {
             int j = i;
-            const float t0 = parray[j * 2];
+            const float t0 = parray[j * 2 + 0];
             const float t1 = parray[j * 2 + 1];
 
             while (j > 0 && parray[(j - 1) * 2] > t0) {
-                parray[j * 2] = parray[(j - 1) * 2];
+                parray[j * 2 + 0] = parray[(j - 1) * 2 + 0];
                 parray[j * 2 + 1] = parray[(j - 1) * 2 + 1];
                 j--;
             }
 
-            parray[j * 2] = t0;
+            parray[j * 2 + 0] = t0;
             parray[j * 2 + 1] = t1;
         }
     }
@@ -904,21 +893,15 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
         if (err)
             alpha = (ftype == 0) ? 5.0f : 7.0f;
 
-        const char * sstring = vsapi->propGetData(in, "sstring", 0, &err);
-        if (err)
-            sstring = "";
+        const double * slocation = vsapi->propGetFloatArray(in, "slocation", &err);
 
-        const char * ssx = vsapi->propGetData(in, "ssx", 0, &err);
-        if (err)
-            ssx = "";
+        const double * ssx = vsapi->propGetFloatArray(in, "ssx", &err);
 
-        const char * ssy = vsapi->propGetData(in, "ssy", 0, &err);
-        if (err)
-            ssy = "";
+        const double * ssy = vsapi->propGetFloatArray(in, "ssy", &err);
 
-        const char * sst = vsapi->propGetData(in, "sst", 0, &err);
-        if (err)
-            sst = "";
+        const double * sst = vsapi->propGetFloatArray(in, "sst", &err);
+
+        const int ssystem = int64ToIntS(vsapi->propGetInt(in, "ssystem", 0, &err));
 
         const int m = vsapi->propNumElements(in, "planes");
 
@@ -993,8 +976,23 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
         if (alpha <= 0.0f)
             throw std::string{ "alpha must be greater than 0.0" };
 
+        if (slocation && (vsapi->propNumElements(in, "slocation") & 1))
+            throw std::string{ "the number of elements in slocation must be a multiple of 2" };
+
+        if (ssx && (vsapi->propNumElements(in, "ssx") & 1))
+            throw std::string{ "the number of elements in ssx must be a multiple of 2" };
+
+        if (ssy && (vsapi->propNumElements(in, "ssy") & 1))
+            throw std::string{ "the number of elements in ssy must be a multiple of 2" };
+
+        if (sst && (vsapi->propNumElements(in, "sst") & 1))
+            throw std::string{ "the number of elements in sst must be a multiple of 2" };
+
+        if (ssystem < 0 || ssystem > 1)
+            throw std::string{ "ssystem must be 0 or 1" };
+
         if (opt < 0 || opt > 3)
-            throw std::string{ "opt must be 0, 1, 2 or 3" };
+            throw std::string{ "opt must be 0, 1, 2, or 3" };
 
         const unsigned numThreads = vsapi->getCoreInfo(core)->numThreads;
         d->ebuff.reserve(numThreads);
@@ -1085,7 +1083,7 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
         if (!d->sigmas || !d->sigmas2 || !d->pmins || !d->pmaxs)
             throw std::string{ "malloc failure (sigmas/sigmas2/pmins/pmaxs)" };
 
-        if (sstring[0] || ssx[0] || ssy[0] || sst[0]) {
+        if (slocation || ssx || ssy || sst) {
             int ndim = 3;
             if (d->tbsize == 1)
                 ndim -= 1;
@@ -1095,23 +1093,15 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
             const float ndiv = 1.0f / ndim;
             int tcnt = 0, sycnt = 0, sxcnt = 0;
             float * tdata, * sydata, * sxdata;
-            bool edis = false;
 
-            if (sstring[0]) {
-                const char * w = sstring;
-                if (sstring[0] == '$') { // FFT3DFilter method
-                    edis = true;
-                    while ((w[0] == '$' || w[0] == ' ') && w[0] != 0)
-                        w++;
-                }
-
-                tdata = parseString(w, tcnt, sigma, edis ? 1.0f : ndiv);
-                sydata = parseString(w, sycnt, sigma, edis ? 1.0f : ndiv);
-                sxdata = parseString(w, sxcnt, sigma, edis ? 1.0f : ndiv);
+            if (slocation) {
+                tdata = parseSigmaLocation(slocation, vsapi->propNumElements(in, "slocation"), tcnt, sigma, ssystem ? 1.0f : ndiv);
+                sydata = parseSigmaLocation(slocation, vsapi->propNumElements(in, "slocation"), sycnt, sigma, ssystem ? 1.0f : ndiv);
+                sxdata = parseSigmaLocation(slocation, vsapi->propNumElements(in, "slocation"), sxcnt, sigma, ssystem ? 1.0f : ndiv);
             } else {
-                tdata = parseString(sst, tcnt, sigma, ndiv);
-                sydata = parseString(ssy, sycnt, sigma, ndiv);
-                sxdata = parseString(ssx, sxcnt, sigma, ndiv);
+                tdata = parseSigmaLocation(sst, vsapi->propNumElements(in, "sst"), tcnt, sigma, ndiv);
+                sydata = parseSigmaLocation(ssy, vsapi->propNumElements(in, "ssy"), sycnt, sigma, ndiv);
+                sxdata = parseSigmaLocation(ssx, vsapi->propNumElements(in, "ssx"), sxcnt, sigma, ndiv);
             }
 
             const int cpx = d->sbsize / 2 + 1;
@@ -1127,7 +1117,7 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
                         const float sxval = getSVal(x, d->sbsize, sxdata, sxcnt, pfx);
                         float val;
 
-                        if (edis) {
+                        if (ssystem) {
                             const float dw = std::sqrt((pft * pft + pfy * pfy + pfx * pfx) / ndim);
                             val = interp(dw, tdata, tcnt);
                         } else {
@@ -1296,10 +1286,11 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegiste
                  "f0beta:float:opt;"
                  "nlocation:int[]:opt;"
                  "alpha:float:opt;"
-                 "sstring:data:opt;"
-                 "ssx:data:opt;"
-                 "ssy:data:opt;"
-                 "sst:data:opt;"
+                 "slocation:float[]:opt;"
+                 "ssx:float[]:opt;"
+                 "ssy:float[]:opt;"
+                 "sst:float[]:opt;"
+                 "ssystem:int:opt;"
                  "planes:int[]:opt;"
                  "opt:int:opt;",
                  dfttestCreate, nullptr, plugin);

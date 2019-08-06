@@ -11,7 +11,7 @@ Ported from AviSynth plugin http://bengal.missouri.edu/~kes25c/
 Usage
 =====
 
-    dfttest.DFTTest(clip clip[, int ftype=0, float sigma=8.0, float sigma2=8.0, float pmin=0.0, float pmax=500.0, int sbsize=16, int smode=1, int sosize=12, int tbsize=3, int tmode=0, int tosize=0, int swin=0, int twin=7, float sbeta=2.5, float tbeta=2.5, bint zmean=True, float f0beta=1.0, int[] nlocation=None, float alpha, string sstring='', string ssx='', string ssy='', string sst='', int[] planes=[0, 1, 2], int opt=0])
+    dfttest.DFTTest(clip clip[, int ftype=0, float sigma=8.0, float sigma2=8.0, float pmin=0.0, float pmax=500.0, int sbsize=16, int smode=1, int sosize=12, int tbsize=3, int tmode=0, int tosize=0, int swin=0, int twin=7, float sbeta=2.5, float tbeta=2.5, bint zmean=True, float f0beta=1.0, int[] nlocation=None, float alpha, float[] slocation=None, float[] ssx=None, float[] ssy=None, float[] sst=None, int ssystem=0, int[] planes=[0, 1, 2], int opt=0])
 
 ```
 clip -
@@ -52,7 +52,7 @@ ftype -
 sigma,sigma2 -
 
     Value of sigma and sigma2 (used as described in ftype parameter description).
-    If using the sstring parameter then the sigma parameter is ignored.
+    If using the slocation parameter then the sigma parameter is ignored.
 
 
 pmin,pmax -
@@ -206,28 +206,26 @@ alpha -
     Has no effect when nlocation is not used.
 
 
-sstring/ssx/ssy/sst -
+slocation/ssx/ssy/sst -
 
     Used to specify functions of sigma based on frequency. If you want sigma to vary
-    based on frequency, then use 'sstring' instead of the 'sigma' parameter. sstring
+    based on frequency, then use 'slocation' instead of the 'sigma' parameter. slocation
     allows you to enter values of sigma for different normalized [0.0,1.0] frequency
     locations. Values for locations between the ones you explicitly specify are computed
     via linear interpolation. The frequency range, which is dependent on sbsize/tbsize,
     is normalized to [0.0,1.0] with 0.0 being the lowest frequency and 1.0 being the
     highest frequency. You MUST specify sigma values for those end point locations
     (0.0 and 1.0)! You can specify as many other locations as you wish, and they don't
-    have to be in any particular order. Each frequency/sigma pair is given as "f.f:s.s".
-    The list of frequency/sigma pairs is saved as a string, with each pair separated by
-    a space.
+    have to be in any particular order. Each frequency/sigma pair is given as "f.f,s.s".
 
     For example, if you want a linear ramp of sigma from 1.0 for the lowest frequency
     to 10.0 for the highest frequency use:
 
-        sstring = "0.0:1.0 1.0:10.0"
+        slocation = [0.0,1.0, 1.0,10.0]
 
-        "0.0:1.0"  =>  this means sigma=1.0 at frequency 0.0
+        "0.0,1.0"  =>  this means sigma=1.0 at frequency 0.0
 
-        "1.0:10.0"  => this means sigma=10.0 at frequency 1.0
+        "1.0,10.0"  => this means sigma=10.0 at frequency 1.0
 
         Sigma values for frequencies between 0.0 and 1.0 will be computed via
         linear interpolation.
@@ -235,29 +233,12 @@ sstring/ssx/ssy/sst -
     Or if you want a band-stop filter that passes low and high frequencies (filters
     middle frequencies) use something like:
 
-        sstring = "0.0:0.0 0.15:10.0 0.85:10.0 1.0:0.0"
-
-    There are two methods for computing sigma values for a given frequency bin based on
-    sstring. The first computes the normalized frequency location of each dimension
-    (horizontal,vertical,temporal), interpolates sigma for each of those dimensions,
-    and then multiples the individual sigmas to obtain the final sigma value. So that
-    everything scales correctly, all sigma values entered in sstring are first raised to
-    the 1/#_dimensions power before performing linear interpolation and multiplying.
-    The second method (based on fft3dfilter's system) works by computing a single location
-    from the seperate dimension locations (x,y,z) as:
-
-        new = sqrt((x*x+y*y+z*z)/3.0)
-
-    sigma is then interpolated to this location. By default the first system is used.
-    To use the second system simply put a '$' sign at the beginning of sstring as shown
-    below:
-
-        sstring = "$ 0.0:1.0 1.0:10.0"
+        slocation = [0.0,0.0, 0.15,10.0, 0.85,10.0, 1.0,0.0]
 
 
     ---------------- ssx/ssy/sst explanation -------------------------------
 
-    sstring breaks the 1D (sbsize=1), 2D (for tbsize=1), or 3D (for sbsize>1 and tbsize>1)
+    slocation breaks the 1D (sbsize=1), 2D (for tbsize=1), or 3D (for sbsize>1 and tbsize>1)
     frequency spectrum into chunks by normalizing each dimension to [0.0,1.0]... i.e. the
     frequency range [0.0,0.25] is a cube covering the first 1/4 of each dimension. This works
     fine if you want to treat all dimensions the same in terms of how sigma should vary.
@@ -265,31 +246,48 @@ sstring/ssx/ssy/sst -
     frequency, this is too limited. This is where ssx/ssy/sst come in!
 
     ssx/ssy/sst allow you to specify sigma as a function of horizontal (ssx), vertical (ssy),
-    and temporal (sst) frequency only. The syntax is exactly the same as that of sstring. To
+    and temporal (sst) frequency only. The syntax is exactly the same as that of slocation. To
     get the final sigma value for a frequency location, the three separate values (one for
-    each dimension) are computed and then multiplied together. As with sstring the sigma values
+    each dimension) are computed and then multiplied together. As with slocation the sigma values
     are first raised to the 1/#_dimensions power before performing linear interpolation and
-    multiplying. If you don't specify all three strings, then a flat function equal to the
+    multiplying. If you don't specify all three dimensions, then a flat function equal to the
     'sigma' parameter is used for the missing dimensions. For dimensions of size one (the
     spatial dimenions if sbsize=1 or the temporal dimension for tbsize=1) the corresponding
-    string is ignored.
+    value is ignored.
 
     For example:
 
-        ssx="0.0:1.0 1.0:10.0",ssy="0.0:1.0 1.0:10.0",sst="0.0:1.0 1.0:10.0"
+        ssx=[0.0,1.0, 1.0,10.0],ssy=[0.0,1.0, 1.0,10.0],sst=[0.0,1.0, 1.0,10.0]
 
     will give the same result as
 
-        sstring="0.0:1.0 1.0:10.0"
+        slocation=[0.0,1.0, 1.0,10.0]
 
     Or if you want to ramp sigma based on temporal frequency:
 
-        sigma=10.0,sst="0.0:1.0 1.0:10.0"
+        sigma=10.0,sst=[0.0,1.0, 1.0,10.0]
 
         This will use 10.0 for the horizontal/vertical dimensions, and ramp
         sigma from 1.0 to 10.0 in the temporal dimension.
 
-    If 'sstring' is specified, it takes precedence over ssx/ssy/sst.
+    If 'slocation' is specified, it takes precedence over ssx/ssy/sst.
+
+
+ssystem -
+
+    There are two methods for computing sigma values for a given frequency bin based on
+    slocation. ssystem=0 computes the normalized frequency location of each dimension
+    (horizontal,vertical,temporal), interpolates sigma for each of those dimensions,
+    and then multiples the individual sigmas to obtain the final sigma value. So that
+    everything scales correctly, all sigma values entered in slocation are first raised to
+    the 1/#_dimensions power before performing linear interpolation and multiplying.
+    ssystem=1 (based on fft3dfilter's system) works by computing a single location
+    from the seperate dimension locations (x,y,z) as:
+
+        new = sqrt((x*x+y*y+z*z)/3.0)
+
+    sigma is then interpolated to this location. By default the first system is used.
+    Has no effect when slocation is not used.
 
 
 planes -
