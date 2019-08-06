@@ -11,7 +11,7 @@ Ported from AviSynth plugin http://bengal.missouri.edu/~kes25c/
 Usage
 =====
 
-    dfttest.DFTTest(clip clip[, int ftype=0, float sigma=8.0, float sigma2=8.0, float pmin=0.0, float pmax=500.0, int sbsize=16, int smode=1, int sosize=12, int tbsize=3, int tmode=0, int tosize=0, int swin=0, int twin=7, float sbeta=2.5, float tbeta=2.5, bint zmean=True, float f0beta=1.0, string nstring='', string sstring='', string ssx='', string ssy='', string sst='', int[] planes=[0, 1, 2], int opt=0])
+    dfttest.DFTTest(clip clip[, int ftype=0, float sigma=8.0, float sigma2=8.0, float pmin=0.0, float pmax=500.0, int sbsize=16, int smode=1, int sosize=12, int tbsize=3, int tmode=0, int tosize=0, int swin=0, int twin=7, float sbeta=2.5, float tbeta=2.5, bint zmean=True, float f0beta=1.0, int[] nlocation=None, float alpha, string sstring='', string ssx='', string ssy='', string sst='', int[] planes=[0, 1, 2], int opt=0])
 
 ```
 clip -
@@ -160,16 +160,16 @@ f0beta -
     which has to perform a pow() computation, and is therefore much slower.
 
 
-nstring -
+nlocation -
 
-    When ftype<2, nstring can be used to specify block locations in the video
+    When ftype<2, nlocation can be used to specify block locations in the video
     from which dfttest will estimate the noise power spectrum (sigma) to
     be used for filtering.
 
     When the noise to be removed is not white (i.e. doesn't have a flat power
     spectrum), specifying only a single sigma value is not adequate.
 
-    The nstring should list locations in the video that consist of noise on
+    The nlocation should list locations in the video that consist of noise on
     a flat background, separated by a space. The line syntax is:
 
         frame_number,plane,ypos,xpos   e.g.  0,0,20,20
@@ -191,19 +191,19 @@ nstring -
     denoising. When listing multiple block locations, it is best/preferred if the
     locations do not overlap.
 
+    An example:
+
+        nlocation=[35,0,45,68, 28,0,23,87]
+
+
+alpha -
+
     Typically, subtracting out the noise power spectrum is not adequate becase
     it is only the average. In any one block the noise spectrum has the potential
     to exceed the average in a frequency bin. Therefore, one typically over
     subtracts based on some multiple of the noise spectrum (usually in the range
-    of 3-8). The default used in dfttest is 5 if ftype=0 and 7 if ftype=1. If you
-    want to use another value, then put the following as the first entry in the
-    string:
-
-        a=over_subtraction_factor   e.g.  a=3.5
-
-    An example:
-
-        nstring="a:4.0 35,0,45,68 28,0,23,87"
+    of 3-8). The default used in dfttest is 5 if ftype=0 and 7 if ftype=1.
+    Has no effect when nlocation is not used.
 
 
 sstring/ssx/ssy/sst -

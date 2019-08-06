@@ -23,7 +23,6 @@
 */
 
 #define _USE_MATH_DEFINES
-#include <clocale>
 #include <cmath>
 #include <cstdio>
 
@@ -899,9 +898,11 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
         if (err)
             d->f0beta = 1.0f;
 
-        const char * nstring = vsapi->propGetData(in, "nstring", 0, &err);
+        const int64_t * nlocation = vsapi->propGetIntArray(in, "nlocation", &err);
+
+        float alpha = static_cast<float>(vsapi->propGetFloat(in, "alpha", 0, &err));
         if (err)
-            nstring = "";
+            alpha = (ftype == 0) ? 5.0f : 7.0f;
 
         const char * sstring = vsapi->propGetData(in, "sstring", 0, &err);
         if (err)
@@ -939,7 +940,7 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
         const int opt = int64ToIntS(vsapi->propGetInt(in, "opt", 0, &err));
 
         if (ftype < 0 || ftype > 4)
-            throw std::string{ "ftype must be 0, 1, 2, 3 or 4" };
+            throw std::string{ "ftype must be 0, 1, 2, 3, or 4" };
 
         if (d->sbsize < 1)
             throw std::string{ "sbsize must be greater than or equal to 1" };
@@ -985,6 +986,12 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
 
         if (d->twin < 0 || d->twin > 11)
             throw std::string{ "twin must be between 0 and 11 (inclusive)" };
+
+        if (nlocation && (vsapi->propNumElements(in, "nlocation") & 3))
+            throw std::string{ "the number of elements in nlocation must be a multiple of 4" };
+
+        if (alpha <= 0.0f)
+            throw std::string{ "alpha must be greater than 0.0" };
 
         if (opt < 0 || opt > 3)
             throw std::string{ "opt must be 0, 1, 2 or 3" };
@@ -1079,8 +1086,6 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
             throw std::string{ "malloc failure (sigmas/sigmas2/pmins/pmaxs)" };
 
         if (sstring[0] || ssx[0] || ssy[0] || sst[0]) {
-            std::setlocale(LC_ALL, "C");
-
             int ndim = 3;
             if (d->tbsize == 1)
                 ndim -= 1;
@@ -1138,8 +1143,6 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
             delete[] tdata;
             delete[] sydata;
             delete[] sxdata;
-
-            std::setlocale(LC_ALL, "");
         } else {
             for (int i = 0; i < d->ccnt2; i++)
                 d->sigmas[i] = sigma / wscalef;
@@ -1151,8 +1154,7 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
             d->pmaxs[i] = pmax / wscale;
         }
 
-        if (nstring[0] && ftype < 2) {
-            std::setlocale(LC_ALL, "C");
+        if (nlocation && ftype < 2) {
             memset(d->sigmas, 0, d->ccnt2 * sizeof(float));
 
             float * VS_RESTRICT hw2 = vs_aligned_malloc<float>((d->bvolume + 7) * sizeof(float), 32);
@@ -1178,60 +1180,37 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
             wscale2 = 1.0f / wscale2;
             fftwf_execute_dft_r2c(d->ft, dftr, dftgc2);
 
-            float alpha = (ftype == 0) ? 5.0f : 7.0f;
             int nnpoints = 0;
             NPInfo * npts = new NPInfo[500];
-            const char * q = nstring;
 
-            if (q[0] == 'a' || q[0] == 'A') {
-                float alphat;
-
-                if (std::sscanf(q, "%*c:%f", &alphat) != 1)
-                    throw std::string{ "error reading alpha value from nstring" };
-
-                if (alphat <= 0.0f)
-                    throw std::string{ "nstring - invalid alpha factor" };
-
-                alpha = alphat;
-
-                while (q[0] != ' ' && q[0] != 0)
-                    q++;
-            }
-
-            while (true) {
-                while ((q[0] < '0' || q[0] > '9') && q[0] != 0)
-                    q++;
-
-                int fn, b, y, x;
-
-                if (q[0] == 0 || std::sscanf(q, "%d,%d,%d,%d", &fn, &b, &y, &x) != 4)
-                    break;
+            for (int i = 0; i < vsapi->propNumElements(in, "nlocation"); i += 4) {
+                const int fn = int64ToIntS(nlocation[i + 0]);
+                const int b = int64ToIntS(nlocation[i + 1]);
+                const int y = int64ToIntS(nlocation[i + 2]);
+                const int x = int64ToIntS(nlocation[i + 3]);
 
                 if (fn < 0 || fn > d->vi->numFrames - d->tbsize)
-                    throw std::string{ "invalid frame number in nstring (" } + std::to_string(fn) + ")";
+                    throw std::string{ "invalid frame number in nlocation (" } + std::to_string(fn) + ")";
 
                 if (b < 0 || b >= d->vi->format->numPlanes)
-                    throw std::string{ "invalid plane number in nstring (" } + std::to_string(b) + ")";
+                    throw std::string{ "invalid plane number in nlocation (" } + std::to_string(b) + ")";
 
                 const int height = d->vi->height >> (b ? d->vi->format->subSamplingH : 0);
                 if (y < 0 || y > height - d->sbsize)
-                    throw std::string{ "invalid y pos in nstring (" } + std::to_string(y) + ")";
+                    throw std::string{ "invalid y pos in nlocation (" } + std::to_string(y) + ")";
 
                 const int width = d->vi->width >> (b ? d->vi->format->subSamplingW : 0);
                 if (x < 0 || x > width - d->sbsize)
-                    throw std::string{ "invalid x pos in nstring (" } + std::to_string(x) + ")";
+                    throw std::string{ "invalid x pos in nlocation (" } + std::to_string(x) + ")";
 
-                if (nnpoints >= 300)
-                    throw std::string{ "maximum number of entries in nstring is 500" };
+                if (nnpoints >= 500)
+                    throw std::string{ "maximum number of entries in nlocation is 500" };
 
                 npts[nnpoints].fn = fn;
                 npts[nnpoints].b = b;
                 npts[nnpoints].y = y;
                 npts[nnpoints].x = x;
                 nnpoints++;
-
-                while (q[0] != ' ' && q[0] != 0)
-                    q++;
             }
 
             for (int ct = 0; ct < nnpoints; ct++) {
@@ -1278,15 +1257,9 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
             vs_aligned_free(dftgc2);
             delete[] npts;
 
-            if (nnpoints != 0) {
-                const float scale = 1.0f / nnpoints;
-                for (int h = 0; h < d->ccnt2; h++)
-                    d->sigmas[h] *= scale * (wscale2 / wscale) * alpha;
-            } else {
-                throw std::string{ "no noise blocks in nstring" };
-            }
-
-            std::setlocale(LC_ALL, "");
+            const float scale = 1.0f / nnpoints;
+            for (int h = 0; h < d->ccnt2; h++)
+                d->sigmas[h] *= scale * (wscale2 / wscale) * alpha;
         }
     } catch (const std::string & error) {
         vsapi->setError(out, ("DFTTest: " + error).c_str());
@@ -1321,7 +1294,8 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegiste
                  "tbeta:float:opt;"
                  "zmean:int:opt;"
                  "f0beta:float:opt;"
-                 "nstring:data:opt;"
+                 "nlocation:int[]:opt;"
+                 "alpha:float:opt;"
                  "sstring:data:opt;"
                  "ssx:data:opt;"
                  "ssy:data:opt;"
