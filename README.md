@@ -303,6 +303,7 @@ opt -
         1 - use c
         2 - use sse2
         3 - use avx2
+        3 - use avx512
 ```
 
 

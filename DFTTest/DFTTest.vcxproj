@@ -7,7 +7,6 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <UseNativeEnvironment>true</UseNativeEnvironment>
     <VCProjectVersion>16.0</VCProjectVersion>
     <ProjectGuid>{23B9F54B-763D-491C-A201-657918CD1377}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
@@ -32,16 +31,17 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>C:\Program Files\VapourSynth\sdk\include\vapoursynth;C:\fftw-3.3.8-dll64;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\fftw-3.3.8-dll64;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Program Files\VapourSynth\sdk\include\vapoursynth;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>VS_TARGET_CPU_X86;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>DFTTEST_X86;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level3</WarningLevel>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <BufferSecurityCheck>false</BufferSecurityCheck>
+      <FloatingPointExceptions>false</FloatingPointExceptions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -55,11 +55,14 @@
     <ClCompile Include="DFTTest_AVX2.cpp">
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Release|x64'">AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
+    <ClCompile Include="DFTTest_AVX512.cpp">
+      <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Release|x64'">AdvancedVectorExtensions512</EnableEnhancedInstructionSet>
+    </ClCompile>
     <ClCompile Include="DFTTest_SSE2.cpp" />
-    <ClCompile Include="vectorclass\instrset_detect.cpp" />
+    <ClCompile Include="VCL2\instrset_detect.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="DFTTest.hpp" />
+    <ClInclude Include="DFTTest.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -24,12 +24,15 @@
     <ClCompile Include="DFTTest_AVX2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="vectorclass\instrset_detect.cpp">
+    <ClCompile Include="DFTTest_AVX512.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VCL2\instrset_detect.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="DFTTest.hpp">
+    <ClInclude Include="DFTTest.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
