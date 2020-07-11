@@ -4,6 +4,8 @@ project('DFTTest', 'cpp',
   version: '7'
 )
 
+cxx = meson.get_compiler('cpp')
+
 sources = [
   'DFTTest/DFTTest.cpp',
   'DFTTest/DFTTest.h'
@@ -12,6 +14,19 @@ sources = [
 vapoursynth_dep = dependency('vapoursynth').partial_dependency(compile_args: true, includes: true)
 
 fftw3f_dep = dependency('fftw3f')
+
+deps = [vapoursynth_dep, fftw3f_dep]
+
+test_fftwf_threads = '''
+#include <fftw3.h>
+int main() {
+    fftwf_init_threads();
+    return 0;
+}
+'''
+if not cxx.links(test_fftwf_threads, dependencies: fftw3f_dep)
+  deps += cxx.find_library('fftw3f_threads')
+endif
 
 libs = []
 
@@ -44,20 +59,20 @@ if host_machine.cpu_family().startswith('x86')
   ]
 
   libs += static_library('avx2', 'DFTTest/DFTTest_AVX2.cpp',
-    dependencies: [vapoursynth_dep, fftw3f_dep],
+    dependencies: deps,
     cpp_args: ['-mavx2', '-mfma'],
     gnu_symbol_visibility: 'hidden'
   )
 
   libs += static_library('avx512', 'DFTTest/DFTTest_AVX512.cpp',
-    dependencies: [vapoursynth_dep, fftw3f_dep],
+    dependencies: deps,
     cpp_args: ['-mavx512f', '-mavx512vl', '-mavx512bw', '-mavx512dq', '-mfma'],
     gnu_symbol_visibility: 'hidden'
   )
 endif
 
 shared_module('dfttest', sources,
-  dependencies: [vapoursynth_dep, fftw3f_dep],
+  dependencies: deps,
   link_with: libs,
   install: true,
   install_dir: join_paths(vapoursynth_dep.get_pkgconfig_variable('libdir'), 'vapoursynth'),
