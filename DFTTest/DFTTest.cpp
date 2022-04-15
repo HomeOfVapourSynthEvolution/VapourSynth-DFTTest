@@ -908,15 +908,9 @@ static void VS_CC dfttestCreate(const VSMap * in, VSMap * out, void * userData, 
 
         const float * hwT = d->hw.get();
         float * VS_RESTRICT dftgrT = dftgr.get();
-        for (int s = 0; s < d->tbsize; s++) {
-            for (int i = 0; i < d->sbsize; i++) {
-                for (int k = 0; k < d->sbsize; k++) {
-                    dftgrT[k] = 255.0f * hwT[k];
-                    wscale += hwT[k] * hwT[k];
-                }
-                hwT += d->sbsize;
-                dftgrT += d->sbsize;
-            }
+        for (int k = 0; k < d->tbsize * d->sbsize * d->sbsize; k++) {
+            dftgrT[k] = 255.0f * hwT[k];
+            wscale += hwT[k] * hwT[k];
         }
 
         wscale = 1.0f / wscale;
